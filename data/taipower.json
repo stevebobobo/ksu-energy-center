@@ -1,0 +1,61 @@
+{
+ "source": "台灣電力公司 政府資料開放平臺（今日電力資訊、各機組發電量）",
+ "fetchedAt": "2026-10-12T02:34:50.826Z",
+ "load": {
+  "currMW": 34334,
+  "utilPct": 75,
+  "supplyMW": 44540,
+  "peakMW": 36600,
+  "reserveMW": 7940,
+  "reservePct": 21.69,
+  "indicator": "G",
+  "peakRange": "13:00-16:00",
+  "publish": "115.10.12(一)10:20"
+ },
+ "gen": {
+  "time": "2026-10-12T10:20:00",
+  "totalMW": 35248,
+  "mix": [
+   {
+    "key": "coal",
+    "label": "燃煤",
+    "mw": 8065
+   },
+   {
+    "key": "cogen",
+    "label": "汽電共生",
+    "mw": 1859
+   },
+   {
+    "key": "gas",
+    "label": "燃氣",
+    "mw": 15170
+   },
+   {
+    "key": "oil",
+    "label": "燃油",
+    "mw": 169
+   },
+   {
+    "key": "solar",
+    "label": "太陽能",
+    "mw": 8061
+   },
+   {
+    "key": "wind",
+    "label": "風力",
+    "mw": 1489
+   },
+   {
+    "key": "hydro",
+    "label": "水力",
+    "mw": 394
+   },
+   {
+    "key": "other",
+    "label": "其他再生",
+    "mw": 41
+   }
+  ]
+ }
+}

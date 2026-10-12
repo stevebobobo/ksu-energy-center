@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>崑山科技大學 校園能源戰情室</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <span class="brand-mark">KSU</span>
+    <div>
+      <h1>崑山科技大學　校園能源戰情室</h1>
+      <p>KUN SHAN UNIVERSITY · ENERGY CENTER</p>
+    </div>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="clock">
+    <span id="clock-label">台北時間</span>
+    <strong id="clock">----</strong>
+  </div>
+</header>
+
+<section class="kpis" id="kpis"></section>
+
+<main class="grid">
+  <div class="col">
+    <section class="panel grow">
+      <h2><i>01</i>全日負載曲線<span class="tag est">推估</span><em id="curve-note"></em></h2>
+      <svg id="curve" viewBox="0 0 600 250" preserveAspectRatio="none"></svg>
+      <ul class="legend">
+        <li><b class="lg-load"></b>校園負載</li>
+        <li><b class="lg-fc"></b>全日預測</li>
+        <li><b class="lg-pv"></b>太陽能</li>
+        <li><b class="lg-grid"></b>台電購電</li>
+        <li><b class="lg-ct"></b>契約容量</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2><i>02</i>各棟用電排行<span class="tag est">推估</span></h2>
+      <div id="rank" class="rank"></div>
+    </section>
+    <section class="panel">
+      <h2><i>03</i>台灣電網<span class="tag live">真實</span><em id="tp-note"></em></h2>
+      <div id="taipower" class="taipower"></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="panel grow">
+      <h2><i>04</i>校園即時用電分布<span class="tag live">真實輪廓</span><em>OpenStreetMap · 北方朝左</em></h2>
+      <svg id="map"></svg>
+      <ul class="legend">
+        <li><b class="ramp"></b>負載率 低 → 高</li>
+        <li><b class="mk-pv"></b>屋頂太陽能</li>
+        <li><b class="mk-ch"></b>冰水主機房</li>
+        <li><b class="mk-off"></b>停電卸載</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2><i>05</i>能量流向</h2>
+      <svg id="flow" viewBox="0 0 600 120"></svg>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="panel grow">
+      <h2><i>06</i><span id="detail-title">建築明細</span><em id="detail-note">點地圖上的建築可切換</em></h2>
+      <div id="detail" class="detail"></div>
+    </section>
+    <section class="panel">
+      <h2><i>07</i>MQTT 訊息流<em id="mqtt-note"></em></h2>
+      <div id="mqtt" class="mqtt"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="foot">
+  <section class="panel alerts">
+    <h2><i>08</i>告警與事件</h2>
+    <ol id="alerts"></ol>
+  </section>
+  <section class="panel controls">
+    <h2><i>09</i>情境演練<em>按下後觀察各面板的反應</em></h2>
+    <div class="btns" id="scenarios"></div>
+    <h2 class="sub"><i>10</i>時間<em>加速時改用今日逐時氣象資料</em></h2>
+    <div class="btns" id="speeds"></div>
+  </section>
+</footer>
+
+<script src="vendor/mqtt.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
