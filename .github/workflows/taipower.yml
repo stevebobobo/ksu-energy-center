@@ -1,0 +1,31 @@
+# 每 10 分鐘抓一次台電即時資料，放到 live-data 分支給網頁讀。
+# 用獨立分支並強制覆蓋，main 分支才不會每天多出上百筆提交。
+name: taipower-snapshot
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node tools/fetch-taipower.mjs
+      - name: 發布到 live-data 分支
+        run: |
+          mkdir out && cp data/taipower.json out/
+          cd out
+          git init -q -b live-data
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add taipower.json
+          git commit -q -m "台電快照 $(date -u +%FT%TZ)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" live-data
