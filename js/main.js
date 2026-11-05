@@ -8,6 +8,7 @@ const TICK_MS = 500;
 
 const campus = await (await fetch('data/campus.json')).json();
 const model  = new CampusModel(campus);
+model.sensors = link.sensors;     // 光敏認養大樓：MQTT 收到的讀值直接給模型用
 const ctx    = { speed: 1, weather, taipower, link, alerts: [], forecast: [] };
 let simTime  = Date.now();
 let fcDay    = 0;

@@ -1,5 +1,5 @@
 // 畫面繪製：只讀模型狀態，不做任何計算決策。
-import { PLANT, MQTT, EMISSION_KG_PER_KWH } from './config.js';
+import { PLANT, MQTT, EMISSION_KG_PER_KWH, SENSOR_BUILDINGS } from './config.js';
 import { taipei, dayStart, tariffAt } from './model.js';
 
 const $   = id => document.getElementById(id);
@@ -70,6 +70,7 @@ export class View {
 
     this.shapes = {};
     const labels = svg('g');
+    const clouds = svg('g', { class: 'clouds' });      // 光敏被遮住時，建築上方的雲影
     for (const b of campus.buildings) {
       const d = b.rings.map(r => 'M' + r.map(q => rot(q).join(' ')).join('L') + 'Z').join('');
       const path = svg('path', { class: 'bld', d });
@@ -83,9 +84,16 @@ export class View {
       if (kw) labels.append(kw);
       if (b.pvKwp) labels.append(svg('rect', { class: 'pv', x: cx - 3, y: cy - 17, width: 6, height: 6 }));
       if (b.plant) labels.append(svg('rect', { class: 'ch', x: cx + (b.pvKwp ? 6 : -2.5), y: cy - 16.5, width: 5, height: 5, transform: `rotate(45 ${cx + (b.pvKwp ? 8.5 : 0)} ${cy - 14})` }));
-      this.shapes[b.id] = { path, kw };
+      let cloud = null, tag = null;
+      if (SENSOR_BUILDINGS.includes(b.id)) {
+        cloud = svg('ellipse', { class: 'cloud', cx, cy, rx: big ? 34 : 24, ry: big ? 24 : 17, opacity: 0 });
+        clouds.append(cloud);
+        tag = svg('text', { class: 'sn', x: cx, y: cy + (big ? 17 : 11) });
+        labels.append(tag);
+      }
+      this.shapes[b.id] = { path, kw, cloud, tag };
     }
-    map.append(labels);
+    map.append(clouds, labels);
 
     const north = svg('g', { class: 'north', transform: `translate(${e.minX + 2} ${e.minY - 4})` });
     north.append(svg('path', { d: 'M-10 0 L6 -5 L2 0 L6 5 Z' }), svg('text', { x: 13, y: 3.2 }, 'N'));
@@ -95,6 +103,9 @@ export class View {
 
     // 停電卸載用的斜線圖樣
     const defs = svg('defs');
+    const blur = svg('filter', { id: 'soft', x: '-50%', y: '-50%', width: '200%', height: '200%' });
+    blur.append(svg('feGaussianBlur', { stdDeviation: 6 }));
+    defs.append(blur);
     const pat  = svg('pattern', { id: 'shed', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' });
     pat.append(svg('rect', { width: 6, height: 6, fill: '#0f1d30' }), svg('rect', { width: 2, height: 6, fill: '#5c6f88' }));
     defs.append(pat);
@@ -187,7 +198,8 @@ export class View {
     const age = taipower.ageMin();
     const tp  = age == null ? ['bad', '無資料'] : [age <= 30 ? 'ok' : '', `${hm(Date.parse(taipower.data.gen.time + '+08:00'))} 快照`];
     const mq  = { online: ['ok', '已連線'], connecting: ['', '連線中'], off: ['bad', '未啟用'] }[link.status];
-    $('chips').innerHTML = [['氣象', wx], ['台電', tp], ['MQTT', mq]]
+    const room = MQTT.base.split('/').pop();
+    $('chips').innerHTML = [['氣象', wx], ['台電', tp], ['MQTT', mq], ...(room !== 'demo' ? [['頻道', ['ok', room]]] : [])]
       .map(([k, [cls, v]]) => `<span class="chip ${cls}">${k}<b>${v}</b></span>`).join('');
   }
 
@@ -227,6 +239,13 @@ export class View {
       sh.path.setAttribute('fill', b.live.shed ? 'url(#shed)' : ramp(b.factor));
       sh.path.classList.toggle('sel', b.id === this.selected);
       if (sh.kw) sh.kw.textContent = fmt(b.live.kw) + ' kW';
+      if (sh.cloud) {
+        const sn = b.sensor;
+        sh.cloud.setAttribute('opacity', sn ? (0.15 + 0.75 * sn.s).toFixed(2) : 0);
+        sh.tag.textContent = sn ? (sn.dim ? `◐ 調光 ${Math.round((0.3 + 0.7 * sn.s) * 100)}%` : `${sn.on ? '● 開燈' : '○ 日光'} ${sn.v}`) : '';
+        sh.tag.classList.toggle('on', !!(sn && sn.on));
+        sh.path.classList.toggle('lit', !!(sn && sn.on));
+      }
     }
   }
 
@@ -301,7 +320,7 @@ export class View {
       <div class="d-head">
         <div><div class="big">${fmt(r.kw)}<small>kW</small>${TAG.est}</div>
           <p>負載率 <b>${fmt(b.factor * 100)}%</b> · 使用率 <b>${fmt(r.occ * 100)}%</b>${b.pvKwp ? ` · 屋頂太陽能 <b>${fmt(b.pv)} kW</b> / ${b.pvKwp} kWp` : ''}</p></div>
-        <p>${r.shed ? '<b style="color:var(--red)">停電卸載中</b>' : ''}</p>
+        <p>${r.shed ? '<b style="color:var(--red)">停電卸載中</b>' : ''}${b.sensor ? `<b class="sn-note">光敏 ${b.sensor.v} · ${b.sensor.dim ? '調光 ' + Math.round((0.3 + 0.7 * b.sensor.s) * 100) + '%' : b.sensor.on ? '天暗開燈' : '日光充足'}<br><small>${b.sensor.by.replace(/</g, '&lt;')} 即時上傳 ${TAG.live}</small></b>` : ''}</p>
       </div>
       <div class="split">${parts.map(([, v, c]) => `<i style="width:${v / r.kw * 100}%;background:${c}"></i>`).join('')}</div>
       <div class="split-legend">${parts.map(([k, v, c]) => `<div><b style="background:${c}"></b>${k}<span>${fmt(v)} kW</span></div>`).join('')}</div>`;
@@ -355,8 +374,8 @@ export class View {
     const stu = [...link.students].filter(([, v]) => Date.now() - v.t < 120e3);
     $('mqtt').innerHTML = `
       <div>${link.broker ? `Broker <code>${link.broker.tcp}</code> · ` : ''}主題 <code>${MQTT.base}/#</code></div>
-      <div class="log">${link.log.slice(0, 5).map(m => `<div>${hm(m.t)} <b>${m.topic}</b> <span>${m.payload.replace(/</g, '&lt;')}</span></div>`).join('') || '<div>尚未收到訊息</div>'}</div>
-      <div class="stu">學生節點：${stu.length ? stu.map(([k, v]) => `<b>${k.replace(/</g, '&lt;')}</b> ${v.payload.replace(/</g, '&lt;').slice(0, 40)}`).join('　') : `發布到 <code>${MQTT.base}/student/你的名字</code> 就會出現在這裡`}</div>`;
+      <div class="log">${link.log.slice(0, 5).map(m => `<div>${hm(m.t)} <b>${m.topic.replace(/</g, '&lt;')}</b> <span>${m.payload.replace(/</g, '&lt;')}</span></div>`).join('') || '<div>尚未收到訊息</div>'}</div>
+      <div class="stu">學生節點${stu.length ? ` <em>${stu.length} 組上線</em>` : ''}：${stu.length ? stu.sort(([a], [b]) => a.localeCompare(b, 'zh-Hant', { numeric: true })).map(([k, v]) => `<span class="chip"><b>${k.replace(/</g, '&lt;')}</b>${v.payload.replace(/</g, '&lt;').slice(0, 40)}</span>`).join('') : `發布到 <code>${MQTT.base}/student/你的名字</code> 就會出現在這裡`}</div>`;
   }
 
   renderAlerts({ alerts }) {

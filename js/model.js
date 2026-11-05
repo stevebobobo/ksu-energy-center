@@ -1,6 +1,6 @@
 // 校園能源模型：不碰畫面，瀏覽器和 Node 都能跑。
 // 輸入是時間與氣象（真實資料），輸出是各棟用電、冰水主機、太陽能、儲能、購電的推估值。
-import { PLANT, TARIFF, TYPES, SCHEDULES, EMISSION_KG_PER_KWH } from './config.js';
+import { PLANT, TARIFF, TYPES, SCHEDULES, EMISSION_KG_PER_KWH, SENSOR } from './config.js';
 
 const H8  = 8 * 3600e3;          // 一律用台北時間（UTC+8）計算，不受瀏覽器時區影響
 const DAY = 864e5;
@@ -87,6 +87,7 @@ export class CampusModel {
     this.events = [];          // 告警事件，由畫面端取走
     this.latch  = {};
     this.soc    = 0.5;
+    this.sensors = null;       // 建築 id → 光敏讀值（由 MQTT 填入）
     this.resetDay(0);
   }
 
@@ -120,7 +121,10 @@ export class CampusModel {
 
     const n     = live ? 1 + b.noise : 1;
     const base  = b.peakKw * cfg.base * (shed ? 0.6 : 1) * n;
-    const light = b.peakKw * (1 - cfg.base - cfg.hvac) * occ * n;
+    let light = b.peakKw * (1 - cfg.base - cfg.hvac) * occ * n;
+    // 認養大樓：開關模式低於門檻全開、天亮只留 30%；調光補償模式依遮光程度在 30%～100% 之間連續調整（至少以五成使用率算）
+    const sn = live && b.sensor;
+    if (sn && !shed) light = b.peakKw * (1 - cfg.base - cfg.hvac) * Math.max(occ, 0.5) * (sn.dim ? SENSOR.lightOff + (1 - SENSOR.lightOff) * sn.s : sn.on ? 1 : SENSOR.lightOff) * n;
     const occH  = occ > 0.05 ? Math.pow(occ, 0.7) : occ;
     const cool  = coolFactor(wx) * (s.outage ? 0.5 : 1);
 
@@ -148,10 +152,11 @@ export class CampusModel {
     return { kw, base, light, hvac, occ, plant, shed };
   }
 
-  pvOf(b, wx) {
+  pvOf(b, wx, live) {
     if (!b.pvKwp) return 0;
     const tCell = wx.T + wx.G * 0.03;
-    return Math.max(0, b.pvKwp * wx.G / 1000 * PLANT.pv.pr * (1 + PLANT.pv.tempCoef * (tCell - 25)));
+    const shade = live && b.sensor ? 1 - SENSOR.pvShade * b.sensor.s : 1;     // 光敏被遮住＝雲飄過這棟
+    return Math.max(0, b.pvKwp * wx.G / 1000 * PLANT.pv.pr * shade * (1 + PLANT.pv.tempCoef * (tCell - 25)));
   }
 
   // 全日預測曲線（每 15 分鐘一點），不含雜訊與情境
@@ -187,11 +192,17 @@ export class CampusModel {
     offNode.offline = sc.offline;
 
     let load = 0, pv = 0, unmetRt = 0, hvacKw = 0;
+    const wall = Date.now();
     for (const b of this.buildings) {
+      const sn = this.sensors && this.sensors.get(b.id);
+      b.sensor = sn && wall - sn.t < SENSOR.staleMs ? sn : null;
+      const wasOn = this.latch['lt-' + b.id];
+      this.alert('lt-' + b.id, !!(b.sensor && b.sensor.on), 'info', b.sensor ? `${b.name} 天暗自動開燈（${b.sensor.by} 光敏 ${b.sensor.v}）` : '');
+      if (wasOn && !(b.sensor && b.sensor.on) && b.sensor) this.events.push({ t: ms, level: 'info', text: `${b.name} 恢復日光，照明調降（${b.sensor.by}）` });
       b.noise += -b.noise * dt / 600 + 0.03 * Math.sqrt(Math.min(1, dt / 600)) * (Math.random() * 2 - 1) * 1.7;
       const r = this.loadOf(b, t, wx, true);
       b.live = r;
-      b.pv   = this.pvOf(b, wx);
+      b.pv   = this.pvOf(b, wx, true);
       b.factor = r.kw / b.peakKw;
       load += r.kw; pv += b.pv; hvacKw += r.hvac;
       if (r.plant) unmetRt += r.plant.unmet;

@@ -79,11 +79,24 @@ export const SOURCES = {
 };
 
 // ── MQTT（公用 broker，任何人都能讀寫，不要放真實敏感資料）──────────
+const ROOM = (typeof location !== 'undefined' && new URLSearchParams(location.search).get('room') || 'demo').replace(/[^\w-]/g, '').slice(0, 24) || 'demo';
 export const MQTT = {
   // 依序嘗試，連不上就換下一個。tcp 是給 ESP32 / Wokwi 用的位址（同一個 broker 的 1883 埠）
   brokers: [
     { ws: 'wss://broker.hivemq.com:8884/mqtt', tcp: 'broker.hivemq.com:1883' },
     { ws: 'wss://broker.emqx.io:8084/mqtt',    tcp: 'broker.emqx.io:1883' },
   ],
-  base: 'ksu-energy-center/demo',      // 主題前綴；學生節點發到 <base>/student/<名稱>
+  // 主題前綴。網址加 ?room=class 就換成課堂頻道，預設 demo 頻道不受學生影響
+  base: 'ksu-energy-center/' + ROOM,
+};
+
+// ── 光敏感測認養大樓 ─────────────────────────────────────────────
+// 網頁控制台發到 <base>/sensor/<名稱>，內容 {"by":"第3組","b":{"lib":{"v":512,"s":0.1,"on":0}}}
+// s = 遮光程度 0～1、on = 低於門檻自動開燈。下面的順序是地圖由左到右，
+// 一塊 Mega 插 13 顆光敏時 A0～A12 依序對應，紙從 A0 掃到 A12 就像雲從地圖左邊飄到右邊
+export const SENSOR_BUILDINGS = ['eng1', 'eng3', 'it', 'yun', 'slm3', 'slm1', 'teach', 'lib', 'cm2', 'rsch', 'cm1', 'admin', 'gym'];
+export const SENSOR = {
+  staleMs: 10e3,         // 超過 10 秒沒收到就恢復模型原本的推估
+  lightOff: 0.3,         // 天亮時照明只開 30%（有自然光）
+  pvShade: 0.85,         // 完全遮住時太陽能少 85%
 };

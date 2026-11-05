@@ -184,8 +184,10 @@ td.id { font-family: var(--mono); color: var(--mute); }
 .mqtt .log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mqtt .log b { color: var(--blue); font-weight: 400; }
 .mqtt .log span { color: var(--ink); }
-.mqtt .stu { border-top: 1px solid var(--line); padding-top: .3rem; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mqtt .stu b { color: var(--gold2); font-weight: 500; }
+.mqtt .stu { border-top: 1px solid var(--line); padding-top: .3rem; color: var(--mute); }
+.mqtt .stu em { font-style: normal; color: var(--gold2); }
+.mqtt .stu .chip { display: inline-block; margin: .2rem .3rem 0 0; padding: .1rem .4rem; border: 1px solid var(--gold2); color: var(--ink); white-space: nowrap; }
+.mqtt .stu b { color: var(--gold2); font-weight: 500; margin-right: .3rem; }
 .mqtt code { font-family: var(--mono); color: var(--ink); }
 
 /* ── 底列 ── */
@@ -218,3 +220,11 @@ button.ghost { color: var(--mute); border-style: dashed; }
   .grid, .foot { grid-template-columns: 1fr; }
   .panel.grow { min-height: 24rem; }
 }
+
+/* ── 光敏認養大樓 ── */
+#map .cloud { fill: #c9d3e0; filter: url(#soft); pointer-events: none; transition: opacity .6s; }
+#map text.sn { font: 500 6.5px var(--mono); fill: #9fb3c8; }
+#map text.sn.on { fill: #ffe082; font-weight: 700; }
+.sn-note { display: inline-block; text-align: right; color: var(--gold2); font-weight: 500; }
+#map .bld.lit { stroke: #ffe082; stroke-width: 2; filter: drop-shadow(0 0 4px #ffd54f); }
+a.chip.guide { color: var(--gold2); text-decoration: none; border-color: var(--gold); }
