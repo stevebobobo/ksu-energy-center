@@ -40,6 +40,7 @@ const SCENARIOS = [
   ['trip',    '主機跳機', true],
   ['offline', '節點離線', true],
   ['outage',  '台電停電', true],
+  ['dr',      '需量反應演練', true],
 ];
 const SPEEDS = [[1, '即時'], [60, '×60'], [600, '×600'], [1440, '×1440（一分鐘一天）']];
 
@@ -181,6 +182,7 @@ export class View {
     this.renderTaipower(ctx);
     this.renderMqtt(ctx);
     this.renderAlerts(ctx);
+    this.renderDr(s);
     for (const k in this.scBtns) this.scBtns[k].classList.toggle('on', model.scenario[k]);
     for (const v in this.spBtns) this.spBtns[v].classList.toggle('on', +v === ctx.speed);
   }
@@ -242,8 +244,10 @@ export class View {
       if (sh.cloud) {
         const sn = b.sensor;
         sh.cloud.setAttribute('opacity', sn ? (0.15 + 0.75 * sn.s).toFixed(2) : 0);
-        sh.tag.textContent = sn ? (sn.dim ? `◐ 調光 ${Math.round((0.3 + 0.7 * sn.s) * 100)}%` : `${sn.on ? '● 開燈' : '○ 日光'} ${sn.v}`) : '';
-        sh.tag.classList.toggle('on', !!(sn && sn.on));
+        const ack = b.drAck, wait = !ack && sn && this.model.scenario.dr;
+        sh.tag.textContent = ack ? `✓ 卸載 第${ack.rank}名` : wait ? '⚠ 等待回應' : sn ? (sn.dim ? `◐ 調光 ${Math.round((0.3 + 0.7 * sn.s) * 100)}%` : `${sn.on ? '● 開燈' : '○ 日光'} ${sn.v}`) : '';
+        sh.tag.classList.toggle('on', !!(ack || (sn && sn.on)));
+        sh.tag.classList.toggle('dr-wait', !!wait);
         sh.path.classList.toggle('lit', !!(sn && sn.on));
       }
     }
@@ -376,6 +380,23 @@ export class View {
       <div>${link.broker ? `Broker <code>${link.broker.tcp}</code> · ` : ''}主題 <code>${MQTT.base}/#</code></div>
       <div class="log">${link.log.slice(0, 5).map(m => `<div>${hm(m.t)} <b>${m.topic.replace(/</g, '&lt;')}</b> <span>${m.payload.replace(/</g, '&lt;')}</span></div>`).join('') || '<div>尚未收到訊息</div>'}</div>
       <div class="stu">學生節點${stu.length ? ` <em>${stu.length} 組上線</em>` : ''}：${stu.length ? stu.sort(([a], [b]) => a.localeCompare(b, 'zh-Hant', { numeric: true })).map(([k, v]) => `<span class="chip"><b>${k.replace(/</g, '&lt;')}</b>${v.payload.replace(/</g, '&lt;').slice(0, 40)}</span>`).join('') : `發布到 <code>${MQTT.base}/student/你的名字</code> 就會出現在這裡`}</div>`;
+  }
+
+  // 需量反應演練的大螢幕排行：進行中顯示計時與名次，結束後保留結果 2 分鐘
+  renderDr(s) {
+    const el = $('dr'), m = this.model, live = m.scenario.dr && m.dr;
+    const dr = live ? m.dr : m.drLast && Date.now() - m.drLast.end < 120e3 ? m.drLast : null;
+    el.hidden = !dr;
+    if (!dr) return;
+    const sec = Math.floor(((live ? Date.now() : dr.end) - dr.start) / 1000);
+    const esc = t => t.replace(/</g, '&lt;');
+    const html = `
+      <div class="dr-head"><b>⚡ 需量反應演練</b><span class="dr-t">${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}</span>
+        <span>${live ? '台電通知卸載：LED 在閃的組，<b>按下按鈕！</b>' : '演練結束'}</span>
+        <em>${dr.acks.length} 組回應 · 卸載 ${fmt(live ? s.drSaved : dr.saved)} kW</em></div>
+      <ol>${dr.acks.slice(0, 13).map(a => `<li class="${a.rank <= 3 ? 'top' : ''}"><i>${a.rank}</i><b>${esc(a.by)}</b><small>${esc(a.ids.map(id => m.byId[id] ? m.byId[id].name : id).join('、'))} · ${a.sec.toFixed(1)} 秒</small></li>`).join('') || '<li class="none">等待第一組按下按鈕…</li>'}</ol>`;
+    if (el.innerHTML !== html) el.innerHTML = html;
+    el.classList.toggle('live', !!live);
   }
 
   renderAlerts({ alerts }) {

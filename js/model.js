@@ -83,7 +83,8 @@ export class CampusModel {
     });
     this.byId = Object.fromEntries(this.buildings.map(b => [b.id, b]));
     this.pvKwp = this.buildings.reduce((s, b) => s + b.pvKwp, 0);
-    this.scenario = { cloud: false, heat: false, event: false, outage: false, trip: false, offline: false };
+    this.scenario = { cloud: false, heat: false, event: false, outage: false, trip: false, offline: false, dr: false };
+    this.dr = null;            // 需量反應演練（與 link.dr 同一個物件，回應由 MQTT 填入）
     this.events = [];          // 告警事件，由畫面端取走
     this.latch  = {};
     this.soc    = 0.5;
@@ -148,8 +149,10 @@ export class CampusModel {
     } else {
       hvac = b.peakKw * cfg.hvac * occH * cool * n;
     }
-    const kw = base + light + hvac + (s.event && b.type === 'gym' ? 220 : 0);
-    return { kw, base, light, hvac, occ, plant, shed };
+    // 需量反應演練：按下按鈕回應的大樓，照明減半、空調調高設定溫度（約省 25%）
+    const drCut = live && s.dr && b.drAck ? light * 0.5 + hvac * 0.25 : 0;
+    const kw = base + light + hvac + (s.event && b.type === 'gym' ? 220 : 0) - drCut;
+    return { kw, base, light, hvac, occ, plant, shed, drCut };
   }
 
   pvOf(b, wx, live) {
@@ -191,9 +194,17 @@ export class CampusModel {
     const offNode = this.byId.eng1.nodes[1];
     offNode.offline = sc.offline;
 
-    let load = 0, pv = 0, unmetRt = 0, hvacKw = 0;
+    let load = 0, pv = 0, unmetRt = 0, hvacKw = 0, drSaved = 0;
     const wall = Date.now();
+    const dr = sc.dr ? this.dr : null;
+    if (dr) {
+      for (; dr.told < dr.acks.length; dr.told++) {
+        const a = dr.acks[dr.told], names = a.ids.map(id => this.byId[id] && this.byId[id].name).filter(Boolean).join('、') || '未認養大樓';
+        this.events.push({ t: ms, level: 'info', text: `第 ${a.rank} 名回應：${a.by.replace(/</g, '&lt;')}（${names}）按下按鈕卸載，${a.sec.toFixed(1)} 秒` });
+      }
+    }
     for (const b of this.buildings) {
+      b.drAck = dr ? dr.acks.find(a => a.ids.includes(b.id)) || null : null;
       const sn = this.sensors && this.sensors.get(b.id);
       b.sensor = sn && wall - sn.t < SENSOR.staleMs ? sn : null;
       const wasOn = this.latch['lt-' + b.id];
@@ -204,7 +215,7 @@ export class CampusModel {
       b.live = r;
       b.pv   = this.pvOf(b, wx, true);
       b.factor = r.kw / b.peakKw;
-      load += r.kw; pv += b.pv; hvacKw += r.hvac;
+      load += r.kw; pv += b.pv; hvacKw += r.hvac; drSaved += r.drCut;
       if (r.plant) unmetRt += r.plant.unmet;
 
       // 模擬感測節點讀值
@@ -266,11 +277,12 @@ export class CampusModel {
     this.alert('cloud', sc.cloud, 'warn', '雲層通過，太陽能發電驟降');
     this.alert('heat', sc.heat, 'warn', `外氣溫度升至 ${wx.T.toFixed(1)}°C，空調負載增加`);
     this.alert('event', sc.event, 'info', '體育館大型活動進場，教學區滿載');
+    this.alert('dr',   sc.dr, 'crit', '需量反應演練：台電通知全校卸載，各組 LED 閃爍時請按下按鈕回應');
     this.alert('off',  sc.offline, 'warn', `感測節點 ${offNode.id}（工程學院一館 室內溫度）失去連線`);
 
     this.s = {
       t: ms, wx, tar, load, pv, grid, demand, ratio, essKw, essMode: mode, soc: this.soc,
-      exportKw, shortfall, hvacKw, renewShare: load > 0 ? Math.min(1, pv / load) : 0, acc: a,
+      exportKw, shortfall, hvacKw, drSaved, renewShare: load > 0 ? Math.min(1, pv / load) : 0, acc: a,
     };
     return this.s;
   }

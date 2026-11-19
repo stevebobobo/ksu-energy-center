@@ -1,6 +1,7 @@
 // MQTT 連線：把戰情室的讀值發布到公用 broker，再訂閱回來顯示，資料流和真實 IoT 系統一樣。
 // 學生的 ESP32 / Wokwi 發布到 <base>/student/<名稱>，就會出現在「學生節點」。
 // 網頁控制台的光敏感測發布到 <base>/sensor/<名稱>，會帶動認養大樓的照明與太陽能。
+// 需量反應演練：戰情室每秒發布 <base>/dr/state，各組按下按鈕後回 <base>/dr/ack/<名稱>，先到先排名。
 // 連不上 broker（沒網路）時整個模組靜靜停用，戰情室照常運作。
 import { MQTT } from './config.js';
 
@@ -9,6 +10,7 @@ export const link = {
   log: [],                  // 最近收到的訊息 [{ t, topic, payload }]
   students: new Map(),      // 名稱 → { t, payload }
   sensors: new Map(),       // 建築 id → { v, s, on, by, t }
+  dr: null,                 // 進行中的需量反應演練 { id, start, acks: [{ by, ids, sec, rank }] }
   rx: 0, tx: 0,
   client: null,
   broker: null,             // 目前連上的 broker
@@ -43,6 +45,7 @@ export const link = {
       const m = short.match(/^student\/([^/]+)$/);
       if (m) this.students.set(m[1].slice(0, 24), { t: Date.now(), payload });
       if (/^sensor\/[^/]+$/.test(short)) this.onSensor(raw);
+      if (/^dr\/ack\/[^/]+$/.test(short)) this.onAck(raw);
     });
   },
 
@@ -60,6 +63,18 @@ export const link = {
     if (!ids.length) return;
     const dark = ids.filter(id => d.b[id].on).length;
     this.students.set(by, { t, payload: ids.length > 1 ? `${ids.length} 棟光敏 · ${dark} 棟開燈` : `光敏 ${d.b[ids[0]].v}${dark ? ' · 開燈' : ''}` });
+  },
+
+  // 演練回應：{"by":"第3組","id":"<演練編號>","b":["it"]}；同一組只算第一次
+  onAck(raw) {
+    const dr = this.dr;
+    let d;
+    try { d = JSON.parse(raw); } catch (e) { return; }
+    if (!dr || !d || d.id !== dr.id) return;
+    const by = String(d.by || '?').slice(0, 16);
+    if (dr.acks.some(a => a.by === by)) return;
+    const ids = (Array.isArray(d.b) ? d.b : []).map(String).slice(0, 13);
+    dr.acks.push({ by, ids, sec: (Date.now() - dr.start) / 1000, rank: dr.acks.length + 1 });
   },
 
   publish(sub, obj) {
