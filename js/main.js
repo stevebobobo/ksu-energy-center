@@ -55,8 +55,8 @@ function tick() {
 
 const view = new View(campus, model, {
   select: id => { view.select(id); view.render(ctx); },
-  toggle: key => { model.scenario[key] = !model.scenario[key]; tick(); },
-  resetScenarios: () => { for (const k in model.scenario) model.scenario[k] = false; tick(); },
+  toggle: key => { model.scenario[key] = !model.scenario[key]; if (key === 'dr') drSync(); tick(); },
+  resetScenarios: () => { for (const k in model.scenario) model.scenario[k] = false; drSync(); tick(); },
   speed: v => {
     if (v === 1 && ctx.speed !== 1) { backfill(); refreshForecast(); }   // 回到即時：重新對齊現在
     ctx.speed = v;
@@ -84,3 +84,15 @@ setInterval(() => {
   const b = model.buildings[turn++ % model.buildings.length];
   link.publish(`building/${b.id}/power`, { kw: +b.live.kw.toFixed(1), name: b.short });
 }, 2000);
+
+// 需量反應演練：開始時給一個新編號；進行中每秒發布狀態，網頁控制台收到就讓 LED 閃爍，按鈕回應後排名
+let drOff = 0;
+function drSync() {
+  if (model.scenario.dr && !model.dr) model.dr = link.dr = { id: Date.now().toString(36), start: Date.now(), acks: [], told: 0 };
+  if (!model.scenario.dr && model.dr) { model.drLast = { ...model.dr, end: Date.now(), saved: model.s ? model.s.drSaved : 0 }; model.dr = link.dr = null; drOff = 3; }
+}
+setInterval(() => {
+  const dr = model.dr;
+  if (model.scenario.dr && dr) link.publish('dr/state', { on: 1, id: dr.id, sec: Math.round((Date.now() - dr.start) / 1000), acks: dr.acks.length });
+  else if (drOff > 0) { drOff--; link.publish('dr/state', { on: 0 }); }
+}, 1000);
