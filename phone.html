@@ -215,6 +215,7 @@ function render() {
       <p class="muted" style="margin:4px 0 0">${DESC[x.k] || ''}</p>
       <ul class="steps">${steps}</ul>
       ${x.done ? `<p class="hint" style="margin:8px 0 0">第 ${x.rank} 組完成。手機只負責通知與回報，真正處理的是現場設備：通知方 ≠ 執行方。</p>` : ''}
+      ${x.done && !x.end ? '<p class="hint" style="margin:4px 0 0"><b>手機仍在待命</b>：老師結束這一輪後會自動回到待命畫面，有新警報一樣會響。</p>' : ''}
       ${x.end && !x.done ? '<p class="late">演練結束，本組沒有完成</p>' : late ? '<p class="late">已超過 60 秒還沒完成：請向指揮官回報狀況</p>' : ''}
     </section>`;
   }).join('');
