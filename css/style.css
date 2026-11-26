@@ -256,6 +256,9 @@ a.chip.guide { color: var(--gold2); text-decoration: none; border-color: var(--g
 .alm-one + .alm-one { border-top: 1px solid var(--line2); margin-top: .5rem; padding-top: .5rem; }
 .alm-one.crit .dr-head > b { color: var(--red); }
 .alm-one.over { opacity: .6; }
+.alm-one.solved .dr-head > b { color: #3fae5a; }
+.alm-one.solved .dr-head span b { color: #3fae5a; }
+.alm.solved { border-color: #3fae5a; }
 .alm li i { font-size: 1.05rem; }
 .alm-x { position: sticky; top: 0; float: right; z-index: 1; font-size: 1.2rem; line-height: 1; padding: .2rem .55rem; margin-left: .5rem;
   background: var(--panel); color: var(--ink); border: 1px solid var(--line2); cursor: pointer; }

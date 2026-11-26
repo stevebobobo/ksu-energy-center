@@ -42,6 +42,8 @@ const SCENARIOS = [
   ['outage',  '台電停電', true],
   ['dr',      '需量反應演練', true],
 ];
+// 警報算「已解除」：有組回報過，而且回報過的組都完成了
+const solvedAlarm = a => a.groups.size > 0 && [...a.groups.values()].every(g => g.done != null);
 const SPEEDS = [[1, '即時'], [60, '×60'], [600, '×600'], [1440, '×1440（一分鐘一天）']];
 
 export class View {
@@ -418,9 +420,13 @@ export class View {
       const left = a.end ? Math.max(0, 60 - Math.floor((Date.now() - a.end) / 1000)) : 0;
       const gs = [...a.groups.values()].sort((x, y) => (x.done ?? 1e9) - (y.done ?? 1e9) || (x.accept ?? 1e9) - (y.accept ?? 1e9) || (x.seen ?? 1e9) - (y.seen ?? 1e9));
       const n = k => gs.filter(g => g[k] != null).length;
-      return `<section class="alm-one ${a.lv}${live ? '' : ' over'}">
-        <div class="dr-head"><b>${a.lv === 'crit' ? '🚨' : '⚠'} ${esc(a.t)}</b><span class="dr-t">${mmss(sec)}</span>
-          <span>${live ? '手機收到 → 回座位接任務 → <b>Arduino 執行</b>' : `演練結束 · 結果保留 ${left} 秒`}</span>
+      const solved = solvedAlarm(a);
+      return `<section class="alm-one ${a.lv}${live ? '' : ' over'}${solved ? ' solved' : ''}">
+        <div class="dr-head"><b>${solved ? '✅' : a.lv === 'crit' ? '🚨' : '⚠'} ${esc(a.t)}${solved ? ' 已解除' : ''}</b><span class="dr-t">${mmss(sec)}</span>
+          <span>${!live ? `演練結束 · 結果保留 ${left} 秒`
+            : solved ? `${n('done')} 組處理完成 · <b>再按一次情境按鈕結束這一輪</b>`
+            : gs.length ? `處理中 ${n('done')}/${gs.length} 組 · 手機收到 → 回座位接任務 → <b>Arduino 執行</b>`
+            : '手機收到 → 回座位接任務 → <b>Arduino 執行</b>'}</span>
           <em>📱 ${n('seen')} · 🛠 ${n('accept')} · ✓ ${n('done')}</em></div>
         <ol>${gs.map(g => `<li class="${g.done != null ? 'top' : ''}"><i>${g.done != null ? '✓' : g.accept != null ? '🛠' : '📱'}</i><b>${esc(g.by)}</b><small>${[
           g.seen != null ? `收到 ${g.seen.toFixed(1)}s` : '',
@@ -429,7 +435,8 @@ export class View {
         ].filter(Boolean).join(' · ')}</small></li>`).join('') || '<li class="none">等待各組手機回報收到…</li>'}</ol></section>`;
     }).join('');
     if (el.innerHTML !== html) el.innerHTML = html;
-    el.classList.toggle('live', items.some(a => !a.end && a.lv === 'crit'));
+    el.classList.toggle('live', items.some(a => !a.end && a.lv === 'crit' && !solvedAlarm(a)));
+    el.classList.toggle('solved', items.every(a => a.end || solvedAlarm(a)));
   }
 
   renderAlerts({ alerts }) {
