@@ -55,8 +55,8 @@ function tick() {
 
 const view = new View(campus, model, {
   select: id => { view.select(id); view.render(ctx); },
-  toggle: key => { model.scenario[key] = !model.scenario[key]; if (key === 'dr') drSync(); tick(); },
-  resetScenarios: () => { for (const k in model.scenario) model.scenario[k] = false; drSync(); tick(); },
+  toggle: key => { model.scenario[key] = !model.scenario[key]; if (key === 'dr') drSync(); almSync(); tick(); },
+  resetScenarios: () => { for (const k in model.scenario) model.scenario[k] = false; drSync(); almSync(); tick(); },
   speed: v => {
     if (v === 1 && ctx.speed !== 1) { backfill(); refreshForecast(); }   // 回到即時：重新對齊現在
     ctx.speed = v;
@@ -95,4 +95,21 @@ setInterval(() => {
   const dr = model.dr;
   if (model.scenario.dr && dr) link.publish('dr/state', { on: 1, id: dr.id, sec: Math.round((Date.now() - dr.start) / 1000), acks: dr.acks.length });
   else if (drOff > 0) { drOff--; link.publish('dr/state', { on: 0 }); }
+  // 警報應變：有情境開著就每秒發布清單，全部關掉後再發 3 次空清單
+  const list = [...link.alarms.values()].map(a => ({ k: a.k, id: a.id, t: a.t, lv: a.lv, sec: Math.round((Date.now() - a.start) / 1000) }));
+  if (list.length) { link.publish('alarm/state', { list }); almOff = 3; }
+  else if (almOff > 0) { almOff--; link.publish('alarm/state', { list: [] }); }
 }, 1000);
+
+// 警報應變演練：情境開啟時給一個新編號。手機回 alarm/seen（收到通知），
+// 網頁控制台回 alarm/task（接下任務、Arduino 完成），都記在 link.alarms
+const ALARMS = { trip: ['主機跳機', 'crit'], outage: ['台電停電', 'crit'], offline: ['節點離線', 'warn'],
+                 cloud: ['烏雲遮日', 'warn'], heat: ['熱浪', 'warn'], event: ['大型活動', 'info'] };
+let almOff = 0;
+function almSync() {
+  for (const k in ALARMS) {
+    const a = link.alarms.get(k);
+    if (model.scenario[k] && !a) link.alarms.set(k, { k, id: Date.now().toString(36) + k, t: ALARMS[k][0], lv: ALARMS[k][1], start: Date.now(), groups: new Map() });
+    if (!model.scenario[k] && a) { a.end = Date.now(); link.alarmsLast.unshift(a); link.alarmsLast.length = Math.min(link.alarmsLast.length, 6); link.alarms.delete(k); }
+  }
+}

@@ -250,3 +250,10 @@ a.chip.guide { color: var(--gold2); text-decoration: none; border-color: var(--g
 .dr li.none { display: block; color: var(--mute); border-style: dashed; }
 .dr-wait { fill: var(--red) !important; animation: drBlink .6s steps(2) infinite; }
 @keyframes drBlink { 50% { opacity: .25; } }
+
+/* 警報應變演練：沿用需量反應面板的樣式，一個警報一段 */
+.alm { max-height: 60vh; overflow-y: auto; }
+.alm-one + .alm-one { border-top: 1px solid var(--line2); margin-top: .5rem; padding-top: .5rem; }
+.alm-one.crit .dr-head > b { color: var(--red); }
+.alm-one.over { opacity: .6; }
+.alm li i { font-size: 1.05rem; }

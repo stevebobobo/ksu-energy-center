@@ -183,6 +183,7 @@ export class View {
     this.renderMqtt(ctx);
     this.renderAlerts(ctx);
     this.renderDr(s);
+    this.renderAlarms(ctx);
     for (const k in this.scBtns) this.scBtns[k].classList.toggle('on', model.scenario[k]);
     for (const v in this.spBtns) this.spBtns[v].classList.toggle('on', +v === ctx.speed);
   }
@@ -397,6 +398,35 @@ export class View {
       <ol>${dr.acks.slice(0, 13).map(a => `<li class="${a.rank <= 3 ? 'top' : ''}"><i>${a.rank}</i><b>${esc(a.by)}</b><small>${esc(a.ids.map(id => m.byId[id] ? m.byId[id].name : id).join('、'))} · ${a.sec.toFixed(1)} 秒</small></li>`).join('') || '<li class="none">等待第一組按下按鈕…</li>'}</ol>`;
     if (el.innerHTML !== html) el.innerHTML = html;
     el.classList.toggle('live', !!live);
+  }
+
+  // 警報應變演練：每個警報一段，列出各組 手機收到 → 接任務 → Arduino 完成 的進度；結束後保留 1 分鐘
+  // demo 頻道沒有學生回應時不顯示，老師單純展示情境不會被擋住
+  renderAlarms({ link }) {
+    const el = $('alm');
+    const items = [...link.alarms.values(), ...link.alarmsLast.filter(a => Date.now() - a.end < 60e3)];
+    const show = items.length && (MQTT.base.split('/').pop() !== 'demo' || items.some(a => a.groups.size));
+    el.hidden = !show;
+    if (!show) return;
+    const dr = $('dr');
+    el.style.top = dr.hidden ? '' : `calc(${dr.offsetTop + dr.offsetHeight}px + .5rem)`;
+    const esc = t => String(t).replace(/</g, '&lt;'), mmss = s => `${pad2(Math.floor(s / 60))}:${pad2(s % 60)}`;
+    const html = items.map(a => {
+      const live = !a.end, sec = Math.floor(((a.end || Date.now()) - a.start) / 1000);
+      const gs = [...a.groups.values()].sort((x, y) => (x.done ?? 1e9) - (y.done ?? 1e9) || (x.accept ?? 1e9) - (y.accept ?? 1e9) || (x.seen ?? 1e9) - (y.seen ?? 1e9));
+      const n = k => gs.filter(g => g[k] != null).length;
+      return `<section class="alm-one ${a.lv}${live ? '' : ' over'}">
+        <div class="dr-head"><b>${a.lv === 'crit' ? '🚨' : '⚠'} ${esc(a.t)}</b><span class="dr-t">${mmss(sec)}</span>
+          <span>${live ? '手機收到 → 回座位接任務 → <b>Arduino 執行</b>' : '演練結束'}</span>
+          <em>📱 ${n('seen')} · 🛠 ${n('accept')} · ✓ ${n('done')}</em></div>
+        <ol>${gs.map(g => `<li class="${g.done != null ? 'top' : ''}"><i>${g.done != null ? '✓' : g.accept != null ? '🛠' : '📱'}</i><b>${esc(g.by)}</b><small>${[
+          g.seen != null ? `收到 ${g.seen.toFixed(1)}s` : '',
+          g.label ? esc(g.label) : '',
+          g.done != null ? `完成 ${g.done.toFixed(1)}s` : g.accept != null ? '執行中…' : '',
+        ].filter(Boolean).join(' · ')}</small></li>`).join('') || '<li class="none">等待各組手機回報收到…</li>'}</ol></section>`;
+    }).join('');
+    if (el.innerHTML !== html) el.innerHTML = html;
+    el.classList.toggle('live', items.some(a => !a.end && a.lv === 'crit'));
   }
 
   renderAlerts({ alerts }) {

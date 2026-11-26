@@ -11,6 +11,8 @@ export const link = {
   students: new Map(),      // 名稱 → { t, payload }
   sensors: new Map(),       // 建築 id → { v, s, on, by, t }
   dr: null,                 // 進行中的需量反應演練 { id, start, acks: [{ by, ids, sec, rank }] }
+  alarms: new Map(),        // 進行中的警報應變 情境 → { k, id, t, lv, start, groups: Map(組名 → { by, seen, accept, done, label }) }
+  alarmsLast: [],           // 剛結束的警報（結果留在畫面上一陣子）
   rx: 0, tx: 0,
   client: null,
   broker: null,             // 目前連上的 broker
@@ -46,7 +48,27 @@ export const link = {
       if (m) this.students.set(m[1].slice(0, 24), { t: Date.now(), payload });
       if (/^sensor\/[^/]+$/.test(short)) this.onSensor(raw);
       if (/^dr\/ack\/[^/]+$/.test(short)) this.onAck(raw);
+      const am = short.match(/^alarm\/(seen|task)\/([^/]+)$/);
+      if (am) this.onAlarm(am[1], am[2], raw);
     });
+  },
+
+  // 警報應變：手機回 alarm/seen/<組名> {"by","id","k"}；網頁控制台回 alarm/task/<組名> {"by","id","k","label","step":"accept"|"done"}
+  // 用主題裡的組名分組，手機和網頁控制台才會合在同一列
+  onAlarm(kind, group, raw) {
+    let d;
+    try { d = JSON.parse(raw); } catch (e) { return; }
+    const a = d && [...this.alarms.values()].find(x => x.id === d.id);
+    if (!a) return;
+    const by = group.slice(0, 16), sec = (Date.now() - a.start) / 1000;
+    const g = a.groups.get(by) || { by };
+    if (kind === 'seen') g.seen ??= sec;
+    else {
+      g.accept ??= sec;
+      if (d.label) g.label = String(d.label).slice(0, 20);
+      if (d.step === 'done') g.done ??= sec;
+    }
+    a.groups.set(by, g);
   },
 
   // 光敏感測：{"by":"第3組","b":{"lib":{"v":512,"s":0.1,"on":0}}}
