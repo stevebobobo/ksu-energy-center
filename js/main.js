@@ -76,8 +76,16 @@ setInterval(() => taipower.refresh(), 300e3);
 
 // MQTT：每 2 秒發布全校摘要與一棟建築的讀值（輪流），訊息繞 broker 一圈再顯示在面板上
 link.connect();
+// 分頁在背景超過 5 分鐘，Chrome 會把一般的 setInterval 壓到一分鐘一次，演練訊息就跟著斷斷續續；
+// Worker 裡的計時器不受影響，所以 MQTT 發布改用 Worker 計時。不支援 Worker 時退回 setInterval
+function bgInterval(fn, ms) {
+  try {
+    const w = new Worker(URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${ms});`], { type: 'text/javascript' })));
+    w.onmessage = () => fn();
+  } catch (e) { setInterval(fn, ms); }
+}
 let turn = 0;
-setInterval(() => {
+bgInterval(() => {
   const s = model.s;
   if (!s) return;
   const r0 = v => Math.round(v);
@@ -92,7 +100,7 @@ function drSync() {
   if (model.scenario.dr && !model.dr) model.dr = link.dr = { id: Date.now().toString(36), start: Date.now(), acks: [], told: 0 };
   if (!model.scenario.dr && model.dr) { model.drLast = { ...model.dr, end: Date.now(), saved: model.s ? model.s.drSaved : 0 }; model.dr = link.dr = null; drOff = 3; }
 }
-setInterval(() => {
+bgInterval(() => {
   const dr = model.dr;
   if (model.scenario.dr && dr) link.publish('dr/state', { on: 1, id: dr.id, sec: Math.round((Date.now() - dr.start) / 1000), acks: dr.acks.length });
   else if (drOff > 0) { drOff--; link.publish('dr/state', { on: 0 }); }
