@@ -52,6 +52,8 @@ export class View {
     this.buildMap(campus);
     this.buildFlow();
     this.buildButtons();
+    // 警報應變面板每秒重畫，用 pointerdown 才不會按到一半被重畫而漏掉
+    $('alm').addEventListener('pointerdown', e => { if (e.target.closest('[data-close]')) this.actions.clearAlarms(); });
   }
 
   select(id) { this.selected = id; }
@@ -411,13 +413,14 @@ export class View {
     const dr = $('dr');
     el.style.top = dr.hidden ? '' : `calc(${dr.offsetTop + dr.offsetHeight}px + .5rem)`;
     const esc = t => String(t).replace(/</g, '&lt;'), mmss = s => `${pad2(Math.floor(s / 60))}:${pad2(s % 60)}`;
-    const html = items.map(a => {
+    const html = (items.some(a => a.end) ? '<button class="alm-x" data-close title="關閉已結束的結果">✕</button>' : '') + items.map(a => {
       const live = !a.end, sec = Math.floor(((a.end || Date.now()) - a.start) / 1000);
+      const left = a.end ? Math.max(0, 60 - Math.floor((Date.now() - a.end) / 1000)) : 0;
       const gs = [...a.groups.values()].sort((x, y) => (x.done ?? 1e9) - (y.done ?? 1e9) || (x.accept ?? 1e9) - (y.accept ?? 1e9) || (x.seen ?? 1e9) - (y.seen ?? 1e9));
       const n = k => gs.filter(g => g[k] != null).length;
       return `<section class="alm-one ${a.lv}${live ? '' : ' over'}">
         <div class="dr-head"><b>${a.lv === 'crit' ? '🚨' : '⚠'} ${esc(a.t)}</b><span class="dr-t">${mmss(sec)}</span>
-          <span>${live ? '手機收到 → 回座位接任務 → <b>Arduino 執行</b>' : '演練結束'}</span>
+          <span>${live ? '手機收到 → 回座位接任務 → <b>Arduino 執行</b>' : `演練結束 · 結果保留 ${left} 秒`}</span>
           <em>📱 ${n('seen')} · 🛠 ${n('accept')} · ✓ ${n('done')}</em></div>
         <ol>${gs.map(g => `<li class="${g.done != null ? 'top' : ''}"><i>${g.done != null ? '✓' : g.accept != null ? '🛠' : '📱'}</i><b>${esc(g.by)}</b><small>${[
           g.seen != null ? `收到 ${g.seen.toFixed(1)}s` : '',

@@ -56,7 +56,8 @@ function tick() {
 const view = new View(campus, model, {
   select: id => { view.select(id); view.render(ctx); },
   toggle: key => { model.scenario[key] = !model.scenario[key]; if (key === 'dr') drSync(); almSync(); tick(); },
-  resetScenarios: () => { for (const k in model.scenario) model.scenario[k] = false; drSync(); almSync(); tick(); },
+  resetScenarios: () => { for (const k in model.scenario) model.scenario[k] = false; drSync(); almSync(); link.alarmsLast.length = 0; tick(); },
+  clearAlarms: () => { link.alarmsLast.length = 0; tick(); },   // 警報應變面板的 ✕：清掉已結束的結果
   speed: v => {
     if (v === 1 && ctx.speed !== 1) { backfill(); refreshForecast(); }   // 回到即時：重新對齊現在
     ctx.speed = v;
