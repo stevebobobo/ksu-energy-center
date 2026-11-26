@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>需量反應 手機接收</title>
+<style>
+:root{--bg:#f1f5f9;--card:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--blue:#2563eb;--red:#dc2626;--green:#16a34a;--amber:#d97706}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1120;--card:#111a2e;--text:#f1f5f9;--muted:#94a3b8;--border:#1e293b;--blue:#60a5fa;--red:#f87171;--green:#4ade80;--amber:#fbbf24}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font-family:system-ui,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif;line-height:1.6;-webkit-tap-highlight-color:transparent}
+main{max-width:480px;margin:0 auto;padding:16px;min-height:100%;display:flex;flex-direction:column;gap:12px}
+header{display:flex;justify-content:space-between;align-items:center;font-size:.9em;color:var(--muted)}
+header b{color:var(--text)}
+.dots span{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--border);margin-left:4px}
+.dots span.on{background:var(--green)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+label{display:block;font-size:.9em;color:var(--muted);margin-bottom:4px}
+input{width:100%;font-size:1.2em;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text)}
+button{width:100%;font-size:1.2em;font-weight:700;padding:16px;border:0;border-radius:12px;background:var(--blue);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--muted);border:1px solid var(--border);font-weight:400;font-size:.95em;padding:10px}
+.big{font-size:2.2em;font-weight:800;line-height:1.25;margin:0}
+.timer{font-size:4.2em;font-weight:800;font-variant-numeric:tabular-nums;line-height:1;margin:8px 0}
+.muted{color:var(--muted);font-size:.92em}
+.hint{font-size:.88em;color:var(--muted)}
+.hidden{display:none!important}
+#alarm{background:var(--red);color:#fff;border:0;text-align:center}
+#alarm .muted{color:#fee2e2}
+#alarm button{background:#fff;color:var(--red)}
+body.flash{animation:flash .8s steps(2) infinite}
+@keyframes flash{50%{background:var(--red)}}
+#late{background:var(--amber);color:#000;border-radius:10px;padding:10px;font-weight:700;margin-top:10px}
+#done{border:3px solid var(--green);text-align:center}
+#done .big{color:var(--green)}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+td{padding:6px 4px;border-bottom:1px solid var(--border)}
+td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+ol{margin:6px 0 0;padding-left:1.4em}
+.me{color:var(--green);font-weight:700}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span>頻道 <b id="room"></b> · <span id="who"></span></span>
+    <span class="dots" title="兩個 broker 的連線狀態"><span id="d0"></span><span id="d1"></span></span>
+  </header>
+
+  <!-- 1. 設定 -->
+  <section id="setup" class="card">
+    <p class="big" style="font-size:1.5em">需量反應 手機接收</p>
+    <p class="muted">手機只負責<b>收到通知</b>。卸載要回到操作台，按 Arduino 上的按鈕。</p>
+    <label for="name">組名（要和網頁控制台填的一模一樣）</label>
+    <input id="name" maxlength="12" placeholder="例如 第3組" autocomplete="off">
+    <p class="hint">按下開始後，畫面會保持亮著。待命期間不要切到別的 App，也不要關螢幕，否則可能收不到。</p>
+    <button id="start">開始待命</button>
+  </section>
+
+  <!-- 2. 待命 -->
+  <section id="idle" class="card hidden">
+    <p class="big">待命中</p>
+    <p id="ecState" class="muted">連線中…</p>
+    <p id="lastResult" class="muted"></p>
+    <button id="test" class="ghost">測試鈴聲</button>
+  </section>
+
+  <!-- 3. 警報 -->
+  <section id="alarm" class="card hidden">
+    <p class="big">⚡ 需量反應警報</p>
+    <p class="muted">全校用電超過契約容量，請立即卸載</p>
+    <div class="timer" id="tAlarm">0</div>
+    <p class="muted">秒（從手機收到通知起算）</p>
+    <p id="alarmStep" style="font-weight:700;font-size:1.15em">回到你的操作台，按 Arduino 按鈕卸載</p>
+    <button id="seen">收到，前往操作台</button>
+    <div id="late" class="hidden">已超過 60 秒還沒卸載：請向指揮官回報狀況</div>
+  </section>
+
+  <!-- 4. 完成 -->
+  <section id="done" class="card hidden">
+    <p class="big">✓ 已卸載</p>
+    <p id="doneRank" class="muted"></p>
+    <table>
+      <tr><td>通知 → 人確認收到</td><td id="rSeen">—</td></tr>
+      <tr><td>通知 → Arduino 執行卸載</td><td id="rAck">—</td></tr>
+    </table>
+    <p class="hint">手機只負責收通知，真正卸載的是操作台上的設備：通知方 ≠ 執行方。</p>
+  </section>
+
+  <!-- 5. 演練結束但沒卸載 -->
+  <section id="missed" class="card hidden">
+    <p class="big" style="color:var(--amber)">演練結束</p>
+    <p>本組這次沒有完成卸載。</p>
+  </section>
+
+  <section id="board" class="card hidden">
+    <b>卸載順序</b> <span class="hint">（依手機收到的順序，正式排名以戰情室為準）</span>
+    <ol id="ranks"></ol>
+  </section>
+</main>
+
+<script src="vendor/mqtt.min.js"></script>
+<script>
+// 戰情室：每秒發布 <base>/dr/state {on, id, sec, acks}；網頁控制台按鈕回 <base>/dr/ack/<組名> {by, id, b}
+// 這一頁只訂閱，按「收到」時另外發 <base>/dr/seen/<組名>，戰情室不會把它當成卸載
+const BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];   // 和戰情室、網頁控制台相同
+const LATE_SEC = 60;
+const $ = id => document.getElementById(id);
+const room = (new URLSearchParams(location.search).get('room') || 'class').replace(/[^\w-]/g, '') || 'class';
+const base = 'ksu-energy-center/' + room;
+$('room').textContent = room;
+
+let name = '', clients = [], audio = null, wake = null, lastEc = 0;
+// 目前的演練：id、手機收到的時間、按下收到的時間、本組卸載的時間
+let cur = null, last = null;
+const acks = new Map();     // 演練 id → 收到 ack 的組名（依序）
+
+try { $('name').value = localStorage.getItem('dr-phone-name') || ''; } catch (e) {}
+
+function show(...ids) {
+  for (const s of ['setup', 'idle', 'alarm', 'done', 'missed', 'board']) $(s).classList.toggle('hidden', !ids.includes(s));
+}
+
+$('start').onclick = () => {
+  name = $('name').value.trim().replace(/[\/+#%]/g, '');    // 和網頁控制台同樣的規則
+  if (!name) { $('name').focus(); return; }
+  try { localStorage.setItem('dr-phone-name', name); } catch (e) {}
+  $('who').textContent = name;
+  unlockAudio();
+  keepAwake();
+  connect();
+  show('idle');
+};
+$('test').onclick = () => beep(3);
+$('seen').onclick = () => {
+  if (!cur || cur.seen) return;
+  cur.seen = Date.now();
+  stopAlarmFx();
+  const sec = +((cur.seen - cur.got) / 1000).toFixed(1);
+  publish('dr/seen/' + name, { by: name, id: cur.id, sec });
+  $('seen').classList.add('hidden');
+  $('alarmStep').textContent = '已確認收到，快回操作台按按鈕！';
+};
+
+function connect() {
+  clients = BROKERS.map((url, i) => {
+    const c = mqtt.connect(url, { clientId: 'ksu-ph-' + Math.random().toString(16).slice(2, 10), connectTimeout: 8000, reconnectPeriod: 5000 });
+    c.on('connect', () => { $('d' + i).classList.add('on'); c.subscribe([base + '/dr/state', base + '/dr/ack/+', base + '/campus/summary']); });
+    c.on('close', () => $('d' + i).classList.remove('on'));
+    c.on('error', () => {});
+    c.on('message', onMessage);
+    return c;
+  });
+}
+function publish(sub, obj) {
+  clients.filter(c => c.connected).forEach(c => c.publish(base + '/' + sub, JSON.stringify(obj)));
+}
+
+function onMessage(topic, buf) {
+  lastEc = Date.now();
+  let d; try { d = JSON.parse(buf.toString()); } catch (e) { return; }
+  const sub = topic.slice(base.length + 1);
+  if (sub === 'dr/state') onState(d);
+  else if (sub.startsWith('dr/ack/')) onAck(sub.slice(7), d);
+}
+
+function onState(d) {
+  if (d.on && d.id) {
+    if (!cur || cur.id !== d.id) startAlarm(d);
+  } else if (cur) {
+    endDrill();
+  }
+}
+
+function startAlarm(d) {
+  cur = { id: d.id, got: Date.now(), seen: 0, ack: 0, rank: 0 };
+  if (!acks.has(d.id)) acks.set(d.id, []);
+  $('seen').classList.remove('hidden');
+  $('late').classList.add('hidden');
+  $('alarmStep').textContent = '回到你的操作台，按 Arduino 按鈕卸載';
+  show('alarm', 'board');
+  renderRanks();
+  document.body.classList.add('flash');
+  alarmFx();
+}
+
+function onAck(group, d) {
+  if (!d || !d.id) return;
+  const list = acks.get(d.id) || [];
+  acks.set(d.id, list);
+  if (list.includes(group)) return;            // 兩個 broker 會各收到一次
+  list.push(group);
+  if (cur && d.id === cur.id) {
+    renderRanks();
+    if (group === name && !cur.ack) {
+      cur.ack = Date.now(); cur.rank = list.length;
+      stopAlarmFx();
+      $('rSeen').textContent = cur.seen ? ((cur.seen - cur.got) / 1000).toFixed(1) + ' 秒' : '沒按收到';
+      $('rAck').textContent = ((cur.ack - cur.got) / 1000).toFixed(1) + ' 秒';
+      $('doneRank').textContent = `第 ${cur.rank} 個完成卸載`;
+      show('done', 'board');
+      beep(1, 880);
+    }
+  }
+}
+
+function endDrill() {
+  stopAlarmFx();
+  last = cur; cur = null;
+  if (last.ack) {
+    $('lastResult').textContent = `上一次：第 ${last.rank} 個卸載，通知到執行 ${((last.ack - last.got) / 1000).toFixed(1)} 秒`;
+    setTimeout(() => { if (!cur) show('idle'); }, 8000);   // 結果留著讓學生看，8 秒後回待命
+  } else {
+    $('lastResult').textContent = '上一次：沒有完成卸載';
+    show('missed', 'board');
+    setTimeout(() => { if (!cur) show('idle'); }, 8000);
+  }
+}
+
+function renderRanks() {
+  const list = (cur && acks.get(cur.id)) || [];
+  $('ranks').innerHTML = list.length
+    ? list.map(g => `<li class="${g === name ? 'me' : ''}">${g.replace(/[<&]/g, '')}</li>`).join('')
+    : '<li class="hint" style="list-style:none;margin-left:-1.4em">還沒有組別卸載</li>';
+}
+
+// 每 0.2 秒更新計時、逾時提示與戰情室連線狀態
+setInterval(() => {
+  if (cur && !cur.ack) {
+    const s = (Date.now() - cur.got) / 1000;
+    $('tAlarm').textContent = Math.floor(s);
+    if (s >= LATE_SEC) $('late').classList.remove('hidden');
+  }
+  if (!name) return;
+  const online = clients.some(c => c.connected);
+  const ago = lastEc ? Math.round((Date.now() - lastEc) / 1000) : null;
+  $('ecState').textContent = !online ? '連線中…'
+    : ago === null || ago > 30 ? '已連上 broker，還沒收到戰情室的資料（老師的戰情室要開著，網址也要加 ?room=' + room + '）'
+    : `戰情室在線（${ago} 秒前有資料），有警報會響鈴、閃紅`;
+}, 200);
+
+// ── 響鈴、震動、螢幕常亮 ─────────────────────────────
+let fxTimer = null;
+function alarmFx() {
+  clearInterval(fxTimer);
+  const ring = () => { beep(2, 990); if (navigator.vibrate) navigator.vibrate([400, 150, 400]); };
+  ring(); fxTimer = setInterval(ring, 1500);    // 按「收到」或完成卸載才停
+}
+function stopAlarmFx() {
+  clearInterval(fxTimer); fxTimer = null;
+  document.body.classList.remove('flash');
+  if (navigator.vibrate) navigator.vibrate(0);
+}
+// 手機瀏覽器要使用者先點過才准出聲，所以在按「開始待命」時建立
+function unlockAudio() {
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); beep(1, 660, 0.05); } catch (e) {}
+}
+function beep(n = 1, hz = 990, len = 0.18) {
+  if (!audio) return;
+  for (let i = 0; i < n; i++) {
+    const t = audio.currentTime + i * (len + 0.1);
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'square'; o.frequency.value = hz;
+    g.gain.setValueAtTime(0.25, t); g.gain.setValueAtTime(0, t + len);
+    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + len);
+  }
+}
+async function keepAwake() {
+  try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !name) return;
+  keepAwake();
+  if (audio) audio.resume();
+});
+</script>
+</body>
+</html>
