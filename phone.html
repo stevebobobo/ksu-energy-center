@@ -44,29 +44,34 @@ body.flash{animation:flash .8s steps(2) infinite}
 .steps li b{font-variant-numeric:tabular-nums}
 .steps button{grid-column:1/-1;margin-top:4px}
 .late{background:var(--amber);color:#000;border-radius:10px;padding:8px 10px;font-weight:700;margin-top:8px}
+/* 中英對照：?lang=en 或右上角切換，英文用小字接在中文後面 */
+.en,.en-i{display:none;font-weight:400}
+body.lang-en .en{display:block;font-size:.78em;opacity:.8;line-height:1.35}
+body.lang-en .en-i{display:inline;font-size:.85em;opacity:.8}
+#lang{width:auto;font-size:.85em;padding:2px 10px;margin-left:8px;background:transparent;color:var(--muted);border:1px solid var(--border);font-weight:600}
 </style>
 </head>
 <body>
 <main>
   <header>
-    <span>頻道 <b id="room"></b> · <span id="who"></span></span>
-    <span class="dots" title="兩個 broker 的連線狀態"><span id="d0"></span><span id="d1"></span></span>
+    <span>頻道<span class="en-i">Channel</span> <b id="room"></b> · <span id="who"></span></span>
+    <span><span class="dots" title="兩個 broker 的連線狀態"><span id="d0"></span><span id="d1"></span></span><button id="lang" type="button">中 / EN</button></span>
   </header>
 
   <section id="setup" class="card">
-    <p class="big" style="font-size:1.5em">戰情室 手機接收</p>
-    <p class="muted">手機負責<b>收到警報、回報戰情室</b>。任務要回座位在網頁控制台接下，再用 Arduino 執行。</p>
-    <label for="name">組名（要和網頁控制台填的一模一樣）</label>
-    <input id="name" maxlength="12" placeholder="例如 第3組" autocomplete="off">
-    <p class="hint">按下開始後，畫面會保持亮著。待命期間不要切到別的 App，也不要關螢幕，否則可能收不到。</p>
-    <button id="start">開始待命</button>
+    <p class="big" style="font-size:1.5em">戰情室 手機接收<span class="en">Energy Center · Phone Alerts</span></p>
+    <p class="muted">手機負責<b>收到警報、回報戰情室</b>。任務要回座位在網頁控制台接下，再用 Arduino 執行。<span class="en">Your phone <b>receives alarms and reports back</b> to the energy center. Then go back to your seat, accept a task on the web console, and do it with the Arduino.</span></p>
+    <label for="name">組名（要和網頁控制台填的一模一樣）<span class="en">Team name (exactly the same as on the web console)</span></label>
+    <input id="name" maxlength="12" placeholder="例如 第3組 / e.g. Team3" autocomplete="off">
+    <p class="hint">按下開始後，畫面會保持亮著。待命期間不要切到別的 App，也不要關螢幕，否則可能收不到。<span class="en">After you tap Start, the screen stays on. While on standby, don't switch to another app or turn off the screen, or you may miss alarms.</span></p>
+    <button id="start">開始待命<span class="en">Start standby</span></button>
   </section>
 
   <section id="idle" class="card hidden">
-    <p class="big">待命中</p>
+    <p class="big">待命中<span class="en">Standing by</span></p>
     <p id="ecState" class="muted">連線中…</p>
     <p id="lastResult" class="muted"></p>
-    <button id="test" class="ghost">測試鈴聲</button>
+    <button id="test" class="ghost">測試鈴聲<span class="en-i">· Test ringtone</span></button>
   </section>
 
   <div id="incs"></div>
@@ -90,11 +95,38 @@ const DESC = {
   event:   '體育館大型活動進場，教學區滿載',
   dr:      '全校用電超過契約容量，台電要求立即卸載',
 };
+// 英文對照（和 js/ui.js 的對照表一致）：警報名稱、說明、網頁控制台的任務名稱
+const TITLE_EN = { trip: 'Chiller trip', outage: 'Grid outage', offline: 'Sensor node offline', cloud: 'Cloud cover', heat: 'Heat wave', event: 'Large event', dr: 'Demand response' };
+const DESC_EN = {
+  trip:    'Chiller CH-1 in the largest plant room tripped. The other chillers take the load, so cooling may not be enough.',
+  outage:  'Taipower feeder outage. The campus switches to island mode and keeps only essential loads.',
+  offline: 'The indoor temperature sensor node in Engineering Building 1 lost its connection.',
+  cloud:   'Clouds are passing over: solar power output drops sharply.',
+  heat:    'Outdoor temperature rises by 5 °C, so the air-conditioning load goes up.',
+  event:   'A large event at the gym: the teaching area is at full load.',
+  dr:      'Campus demand is above the contract capacity. Taipower asks us to shed load right now.',
+};
+const LABEL_EN = {
+  '啟動備援主機 CH-2': 'Start backup chiller CH-2', '關閉本棟非必要空調': 'Turn off non-essential AC in this building',
+  '卸載非必要負載': 'Shed non-essential loads', '確認儲能接手供電': 'Confirm battery storage takes over',
+  '現場人工量測（光敏代班）': 'Manual on-site reading (light sensor stands in)', '重新啟動感測節點': 'Restart the sensor node',
+  '儲能放電補位': 'Discharge battery storage to cover the gap', '回報本棟雲遮程度': 'Report cloud cover at this building',
+  '空調溫度調高 1°C': 'Raise the AC setpoint by 1 °C', '提前預冷': 'Pre-cool early',
+  '關閉走廊照明': 'Turn off corridor lights', '錯開空調啟動': 'Stagger AC start-up',
+};
+// 中文後面接英文小字；顯示與否由 body.lang-en 控制
+const E = s => s ? `<span class="en">${s}</span>` : '';
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[<&]/g, '');
 const room = (new URLSearchParams(location.search).get('room') || 'class').replace(/[^\w-]/g, '') || 'class';
 const base = 'ksu-energy-center/' + room;
 $('room').textContent = room;
+const qLang = new URLSearchParams(location.search).get('lang');
+let langEn = qLang === 'en';
+try { const s = localStorage.getItem('dr-phone-lang'); if (s && !qLang) langEn = s === 'en'; } catch (e) {}
+const applyLang = () => { document.body.classList.toggle('lang-en', langEn); document.documentElement.lang = langEn ? 'en' : 'zh-Hant'; };
+applyLang();
+$('lang').onclick = () => { langEn = !langEn; applyLang(); try { localStorage.setItem('dr-phone-lang', langEn ? 'en' : 'zh'); } catch (e) {} };
 
 let name = '', clients = [], audio = null, lastEc = 0;
 const incs = new Map();       // 警報編號 → { id, kind:'alarm'|'dr', k, t, lv, got, seen, accept, label, done, rank, end }
@@ -146,7 +178,8 @@ function end(id) {
   const x = incs.get(id);
   if (!x || x.end) return;
   x.end = Date.now();
-  $('lastResult').textContent = `上一則：${x.t}，${x.done ? `第 ${x.rank} 組完成，通知到完成 ${secs(x, x.done)} 秒` : '本組沒有完成'}`;
+  $('lastResult').innerHTML = `上一則：${esc(x.t)}，${x.done ? `第 ${x.rank} 組完成，通知到完成 ${secs(x, x.done)} 秒` : '本組沒有完成'}`
+    + E(`Last alarm: ${TITLE_EN[x.k] || ''} — ${x.done ? `team #${x.rank} to finish, ${secs(x, x.done)} s from alert to done` : 'your team did not finish'}`);
   changed();
 }
 function onAlarmState(d) {
@@ -203,20 +236,20 @@ function render() {
     const el = s => (s - x.got) / 1000, run = Math.floor(el(x.done || x.end || now));
     const step = (ok, now_, label, val) => `<li class="${ok ? 'ok' : now_ ? 'now' : ''}"><span>${ok ? '✓' : now_ ? '👉' : '○'}</span><span>${label}</span><b>${val || ''}</b></li>`;
     const steps = [
-      step(true, false, '手機收到通知', '0 秒'),
-      step(x.seen, !x.seen, '按「收到」回報戰情室', x.seen ? el(x.seen).toFixed(1) + ' 秒' : '')
-        + (!x.seen && !x.end ? `<li style="background:none;padding:0"><button data-seen="${x.id}">收到，前往座位</button></li>` : ''),
-      x.kind === 'alarm' ? step(x.accept, x.seen && !x.accept, x.accept ? `接下任務：${esc(x.label)}` : '回座位，在網頁控制台接任務', x.accept ? el(x.accept).toFixed(1) + ' 秒' : '') : '',
-      step(x.done, (x.kind === 'dr' ? x.seen : x.accept) && !x.done, x.kind === 'dr' ? '按 Arduino 按鈕卸載' : '用 Arduino 執行任務', x.done ? `${el(x.done).toFixed(1)} 秒` : ''),
+      step(true, false, '手機收到通知' + E('Phone received the alert'), '0 秒'),
+      step(x.seen, !x.seen, '按「收到」回報戰情室' + E('Tap "Got it" to report to the energy center'), x.seen ? el(x.seen).toFixed(1) + ' 秒' : '')
+        + (!x.seen && !x.end ? `<li style="background:none;padding:0"><button data-seen="${x.id}">收到，前往座位${E('Got it — going to my seat')}</button></li>` : ''),
+      x.kind === 'alarm' ? step(x.accept, x.seen && !x.accept, x.accept ? `接下任務：${esc(x.label)}${E('Task accepted: ' + (LABEL_EN[x.label] || esc(x.label)))}` : '回座位，在網頁控制台接任務' + E('Go to your seat and accept a task on the web console'), x.accept ? el(x.accept).toFixed(1) + ' 秒' : '') : '',
+      step(x.done, (x.kind === 'dr' ? x.seen : x.accept) && !x.done, x.kind === 'dr' ? '按 Arduino 按鈕卸載' + E('Press the Arduino button to shed load') : '用 Arduino 執行任務' + E('Do the task with the Arduino'), x.done ? `${el(x.done).toFixed(1)} 秒` : ''),
     ].join('');
     const late = !x.done && !x.end && el(now) >= LATE_SEC;
     return `<section class="card inc ${x.lv}${x.done ? ' ok' : ''}${x.end ? ' over' : ''}">
-      <div class="inc-head"><p class="big">${x.done ? '✓ ' : x.lv === 'crit' ? '🚨 ' : '⚠ '}${esc(x.t)}</p><span class="inc-t">${run}<small style="font-size:.4em"> 秒</small></span></div>
-      <p class="muted" style="margin:4px 0 0">${DESC[x.k] || ''}</p>
+      <div class="inc-head"><p class="big">${x.done ? '✓ ' : x.lv === 'crit' ? '🚨 ' : '⚠ '}${esc(x.t)}${E(TITLE_EN[x.k])}</p><span class="inc-t">${run}<small style="font-size:.4em"> 秒</small></span></div>
+      <p class="muted" style="margin:4px 0 0">${DESC[x.k] || ''}${E(DESC_EN[x.k])}</p>
       <ul class="steps">${steps}</ul>
-      ${x.done ? `<p class="hint" style="margin:8px 0 0">第 ${x.rank} 組完成。手機只負責通知與回報，真正處理的是現場設備：通知方 ≠ 執行方。</p>` : ''}
-      ${x.done && !x.end ? '<p class="hint" style="margin:4px 0 0"><b>手機仍在待命</b>：老師結束這一輪後會自動回到待命畫面，有新警報一樣會響。</p>' : ''}
-      ${x.end && !x.done ? '<p class="late">演練結束，本組沒有完成</p>' : late ? '<p class="late">已超過 60 秒還沒完成：請向指揮官回報狀況</p>' : ''}
+      ${x.done ? `<p class="hint" style="margin:8px 0 0">第 ${x.rank} 組完成。手機只負責通知與回報，真正處理的是現場設備：通知方 ≠ 執行方。${E(`Team #${x.rank} to finish. The phone only notifies and reports; the real work is done by the equipment on site — the notifier is not the executor.`)}</p>` : ''}
+      ${x.done && !x.end ? '<p class="hint" style="margin:4px 0 0"><b>手機仍在待命</b>：老師結束這一輪後會自動回到待命畫面，有新警報一樣會響。' + E('<b>Phone still on standby</b>: when the teacher ends this round, it goes back to the standby screen. New alarms will still ring.') + '</p>' : ''}
+      ${x.end && !x.done ? '<p class="late">演練結束，本組沒有完成' + E('Drill over — your team did not finish') + '</p>' : late ? '<p class="late">已超過 60 秒還沒完成：請向指揮官回報狀況' + E('Over 60 seconds and not done: report your status to the commander') + '</p>' : ''}
     </section>`;
   }).join('');
   if ($('incs').innerHTML !== html) $('incs').innerHTML = html;
@@ -228,9 +261,10 @@ setInterval(() => {
   if (incs.size) render();
   const online = clients.some(c => c.connected);
   const ago = lastEc ? Math.round((Date.now() - lastEc) / 1000) : null;
-  $('ecState').textContent = !online ? '連線中…'
-    : ago === null || ago > 30 ? '已連上 broker，還沒收到戰情室的資料（老師的戰情室要開著，網址也要加 ?room=' + room + '）'
-    : `戰情室在線（${ago} 秒前有資料），有警報會響鈴、閃紅`;
+  const ec = !online ? '連線中…' + E('Connecting…')
+    : ago === null || ago > 30 ? '已連上 broker，還沒收到戰情室的資料（老師的戰情室要開著，網址也要加 ?room=' + room + '）' + E(`Connected to the broker, but no data from the energy center yet (the teacher's energy center page must be open with ?room=${room})`)
+    : `戰情室在線（${ago} 秒前有資料），有警報會響鈴、閃紅` + E(`Energy center online (data ${ago} s ago). Alarms will ring and flash red.`);
+  if ($('ecState').innerHTML !== ec) $('ecState').innerHTML = ec;
 }, 500);
 
 // ── 響鈴、震動、螢幕常亮：還有警報沒按「收到」就一直響 ─────────────

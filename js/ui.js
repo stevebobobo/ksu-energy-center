@@ -42,6 +42,19 @@ const SCENARIOS = [
   ['outage',  '台電停電', true],
   ['dr',      '需量反應演練', true],
 ];
+// 中英對照：網址加 ?lang=en 時，演練相關的文字後面附英文小字（和 phone.html 的對照表一致）
+const LANG_EN = typeof location !== 'undefined' && new URLSearchParams(location.search).get('lang') === 'en';
+const en = s => LANG_EN && s ? `<span class="en">${s}</span>` : '';
+const SC_EN = { cloud: 'Cloud cover', heat: 'Heat wave', event: 'Large event', trip: 'Chiller trip', offline: 'Node offline', outage: 'Grid outage', dr: 'Demand response drill' };
+const TITLE_EN = { trip: 'Chiller trip', outage: 'Grid outage', offline: 'Sensor node offline', cloud: 'Cloud cover', heat: 'Heat wave', event: 'Large event' };
+const LABEL_EN = {
+  '啟動備援主機 CH-2': 'Start backup chiller CH-2', '關閉本棟非必要空調': 'Turn off non-essential AC',
+  '卸載非必要負載': 'Shed non-essential loads', '確認儲能接手供電': 'Confirm battery storage takes over',
+  '現場人工量測（光敏代班）': 'Manual on-site reading', '重新啟動感測節點': 'Restart the sensor node',
+  '儲能放電補位': 'Discharge battery storage', '回報本棟雲遮程度': 'Report cloud cover',
+  '空調溫度調高 1°C': 'Raise AC setpoint 1 °C', '提前預冷': 'Pre-cool early',
+  '關閉走廊照明': 'Turn off corridor lights', '錯開空調啟動': 'Stagger AC start-up',
+};
 // 警報算「已解除」：有組回報過，而且回報過的組都完成了
 const solvedAlarm = a => a.groups.size > 0 && [...a.groups.values()].every(g => g.done != null);
 const SPEEDS = [[1, '即時'], [60, '×60'], [600, '×600'], [1440, '×1440（一分鐘一天）']];
@@ -150,14 +163,14 @@ export class View {
     this.scBtns = {};
     for (const [key, label, danger] of SCENARIOS) {
       const b = document.createElement('button');
-      b.textContent = label;
+      b.textContent = LANG_EN ? `${label} · ${SC_EN[key]}` : label;
       if (danger) b.className = 'danger';
       b.onclick = () => this.actions.toggle(key);
       sc.append(b);
       this.scBtns[key] = b;
     }
     const reset = document.createElement('button');
-    reset.textContent = '全部復原'; reset.className = 'ghost';
+    reset.textContent = LANG_EN ? '全部復原 · Reset all' : '全部復原'; reset.className = 'ghost';
     reset.onclick = () => this.actions.resetScenarios();
     sc.append(reset);
 
@@ -396,10 +409,10 @@ export class View {
     const sec = Math.floor(((live ? Date.now() : dr.end) - dr.start) / 1000);
     const esc = t => t.replace(/</g, '&lt;');
     const html = `
-      <div class="dr-head"><b>⚡ 需量反應演練</b><span class="dr-t">${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}</span>
-        <span>${live ? '台電通知卸載：LED 在閃的組，<b>按下按鈕！</b>' : '演練結束'}</span>
-        <em>${dr.acks.length} 組回應 · 卸載 ${fmt(live ? s.drSaved : dr.saved)} kW</em></div>
-      <ol>${dr.acks.slice(0, 13).map(a => `<li class="${a.rank <= 3 ? 'top' : ''}"><i>${a.rank}</i><b>${esc(a.by)}</b><small>${esc(a.ids.map(id => m.byId[id] ? m.byId[id].name : id).join('、'))} · ${a.sec.toFixed(1)} 秒</small></li>`).join('') || '<li class="none">等待第一組按下按鈕…</li>'}</ol>`;
+      <div class="dr-head"><b>⚡ 需量反應演練${en('Demand response drill')}</b><span class="dr-t">${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}</span>
+        <span>${live ? '台電通知卸載：LED 在閃的組，<b>按下按鈕！</b>' + en('Shed load now: teams with a blinking LED, <b>press the button!</b>') : '演練結束' + en('Drill over')}</span>
+        <em>${dr.acks.length} 組回應 · 卸載 ${fmt(live ? s.drSaved : dr.saved)} kW${en(`${dr.acks.length} teams · ${fmt(live ? s.drSaved : dr.saved)} kW shed`)}</em></div>
+      <ol>${dr.acks.slice(0, 13).map(a => `<li class="${a.rank <= 3 ? 'top' : ''}"><i>${a.rank}</i><b>${esc(a.by)}</b><small>${esc(a.ids.map(id => m.byId[id] ? m.byId[id].name : id).join('、'))} · ${a.sec.toFixed(1)} 秒</small></li>`).join('') || `<li class="none">等待第一組按下按鈕…${en('Waiting for the first team to press the button…')}</li>`}</ol>`;
     if (el.innerHTML !== html) el.innerHTML = html;
     el.classList.toggle('live', !!live);
   }
@@ -422,17 +435,17 @@ export class View {
       const n = k => gs.filter(g => g[k] != null).length;
       const solved = solvedAlarm(a);
       return `<section class="alm-one ${a.lv}${live ? '' : ' over'}${solved ? ' solved' : ''}">
-        <div class="dr-head"><b>${solved ? '✅' : a.lv === 'crit' ? '🚨' : '⚠'} ${esc(a.t)}${solved ? ' 已解除' : ''}</b><span class="dr-t">${mmss(sec)}</span>
-          <span>${!live ? `演練結束 · 結果保留 ${left} 秒`
-            : solved ? `${n('done')} 組處理完成 · <b>再按一次情境按鈕結束這一輪</b>`
-            : gs.length ? `處理中 ${n('done')}/${gs.length} 組 · 手機收到 → 回座位接任務 → <b>Arduino 執行</b>`
-            : '手機收到 → 回座位接任務 → <b>Arduino 執行</b>'}</span>
+        <div class="dr-head"><b>${solved ? '✅' : a.lv === 'crit' ? '🚨' : '⚠'} ${esc(a.t)}${solved ? ' 已解除' : ''}${en((TITLE_EN[a.k] || '') + (solved ? ' — resolved' : ''))}</b><span class="dr-t">${mmss(sec)}</span>
+          <span>${!live ? `演練結束 · 結果保留 ${left} 秒` + en(`Drill over · results stay for ${left} s`)
+            : solved ? `${n('done')} 組處理完成 · <b>再按一次情境按鈕結束這一輪</b>` + en(`${n('done')} teams done · <b>press the scenario button again to end this round</b>`)
+            : gs.length ? `處理中 ${n('done')}/${gs.length} 組 · 手機收到 → 回座位接任務 → <b>Arduino 執行</b>` + en(`In progress ${n('done')}/${gs.length} teams · phone alert → accept task at your seat → <b>do it with Arduino</b>`)
+            : '手機收到 → 回座位接任務 → <b>Arduino 執行</b>' + en('Phone alert → accept task at your seat → <b>do it with Arduino</b>')}</span>
           <em>📱 ${n('seen')} · 🛠 ${n('accept')} · ✓ ${n('done')}</em></div>
         <ol>${gs.map(g => `<li class="${g.done != null ? 'top' : ''}"><i>${g.done != null ? '✓' : g.accept != null ? '🛠' : '📱'}</i><b>${esc(g.by)}</b><small>${[
-          g.seen != null ? `收到 ${g.seen.toFixed(1)}s` : '',
-          g.label ? esc(g.label) : '',
-          g.done != null ? `完成 ${g.done.toFixed(1)}s` : g.accept != null ? '執行中…' : '',
-        ].filter(Boolean).join(' · ')}</small></li>`).join('') || '<li class="none">等待各組手機回報收到…</li>'}</ol></section>`;
+          g.seen != null ? `收到 ${g.seen.toFixed(1)}s` + en('seen') : '',
+          g.label ? esc(g.label) + en(LABEL_EN[g.label]) : '',
+          g.done != null ? `完成 ${g.done.toFixed(1)}s` + en('done') : g.accept != null ? '執行中…' + en('working…') : '',
+        ].filter(Boolean).join(' · ')}</small></li>`).join('') || `<li class="none">等待各組手機回報收到…${en("Waiting for teams' phones to report…")}</li>`}</ol></section>`;
     }).join('');
     if (el.innerHTML !== html) el.innerHTML = html;
     el.classList.toggle('live', items.some(a => !a.end && a.lv === 'crit' && !solvedAlarm(a)));
