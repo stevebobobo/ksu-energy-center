@@ -22,6 +22,7 @@ export const TARIFF = {
     nonSummer: { peak: 5.47, half: 5.47, sat: 2.41, off: 2.32 },
   },
   label: { peak: '尖峰', half: '半尖峰', sat: '週六半尖峰', off: '離峰' },
+  labelEn: { peak: 'Peak', half: 'Mid-peak', sat: 'Sat. mid-peak', off: 'Off-peak' },
 };
 
 // 電力排碳係數：能源署 114 年度公用售電業係數（2026-06-02 公布），公斤 CO2e/度

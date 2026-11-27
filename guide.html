@@ -33,10 +33,10 @@ ol li,ul li{margin:4px 0}
 </head>
 <body>
 <header>
-  <h1>校園能源戰情室　使用說明</h1>
-  <p>KSU ENERGY CENTER · GUIDE　｜　<a href="./">回到戰情室</a></p>
+  <h1 data-en="Campus Energy Center · Guide">校園能源戰情室　使用說明</h1>
+  <p>KSU ENERGY CENTER · GUIDE　｜　<a href="./" id="back" data-en="Back to the Energy Center">回到戰情室</a></p>
 </header>
-<main>
+<main id="zh">
 
 <section>
   <h2><i>01</i>三個網址</h2>
@@ -121,5 +121,103 @@ ol li,ul li{margin:4px 0}
 </section>
 
 </main>
+
+<!-- 英文版（?lang=en）：給外籍生與國外來賓 -->
+<main id="en" hidden>
+
+<section>
+  <h2><i>01</i>Three URLs</h2>
+  <table>
+    <tr><th>Use</th><th>URL</th><th>What it shows</th></tr>
+    <tr><td>General demo</td><td><code>stevebobobo.github.io/ksu-energy-center/?lang=en</code></td><td>Model estimates only, nobody else can affect it</td></tr>
+    <tr><td><b>Light-sensor demo</b></td><td><code>stevebobobo.github.io/ksu-energy-center/?room=show&amp;lang=en</code></td><td>Receives the 13 light sensors on the demo board</td></tr>
+    <tr><td>Class</td><td><code>stevebobobo.github.io/ksu-energy-center/?room=class&amp;lang=en</code></td><td>Receives each student team's light sensor</td></tr>
+  </table>
+  <p><code>?room=</code> is the "channel". Channels do not interfere with each other; the current channel is shown at the top right. <code>lang=en</code> switches the screen to English.</p>
+</section>
+
+<section>
+  <h2><i>02</i>Light-sensor demo: a cloud passing over campus</h2>
+  <p>Thirteen light-dependent resistors (LDRs) sit on a breadboard, one per campus building. Slowly sweep a sheet of A4 paper from left to right, like a cloud drifting over the campus:</p>
+  <ul>
+    <li>A <b>cloud shadow</b> appears over each covered building and its rooftop solar output drops</li>
+    <li>Darkened buildings <b>turn their lights on automatically</b>: in "Switch" mode they go fully on below the threshold (gold outline); in "Dimming" mode the darker it gets, the brighter the lights (shown as ◐ dim xx%)</li>
+    <li>The daily load curve, the building ranking and the alerts panel all react in real time</li>
+  </ul>
+
+  <h3>What you need</h3>
+  <ul>
+    <li>Arduino Mega 2560 (with the web console firmware <code>mega_io.ino</code>) + USB cable</li>
+    <li>Large breadboard, 13 LDRs, 13 × 10 kΩ resistors, jumper wires</li>
+    <li>Laptop (Chrome or Edge, online) and a sheet of A4 paper</li>
+  </ul>
+
+  <h3>Wiring (the same for every sensor)</h3>
+  <pre>5V ── LDR ──┬── A0 (A1, A2 … A12)
+             └── 10kΩ ── GND</pre>
+  <p>Wire the LDRs <b>left to right to A0 through A12</b>, in the same order as the buildings on the map from left to right:</p>
+  <table>
+    <tr><th>Pin</th><td>A0</td><td>A1</td><td>A2</td><td>A3</td><td>A4</td><td>A5</td><td>A6</td></tr>
+    <tr><th>Building</th><td>Eng 1</td><td>Eng 3</td><td>IT</td><td>Yunqing</td><td>SLM 3</td><td>SLM 1</td><td>Teaching</td></tr>
+    <tr><th>Pin</th><td>A7</td><td>A8</td><td>A9</td><td>A10</td><td>A11</td><td>A12</td><td></td></tr>
+    <tr><th>Building</th><td>Library</td><td>Media 2</td><td>Research</td><td>Media 1</td><td>Admin</td><td>Gym</td><td></td></tr>
+  </table>
+  <div class="tip">A 3-pin light-sensor module also works: VCC to 5V, GND to GND, AO to A0–A12, and set "When covered" to "Value rises" in the console.</div>
+
+  <h3>Steps</h3>
+  <ol>
+    <li>Open the web console (already set to demo mode):<br><a href="https://webhandyman996.github.io/mega-web-io/?mode=multi&amp;room=show&amp;lang=en" target="_blank"><code>webhandyman996.github.io/mega-web-io/?mode=multi&amp;room=show&amp;lang=en</code></a></li>
+    <li>Press "Connect Mega 2560" and pick the Mega's COM port.</li>
+    <li>With the paper away, press <b>"Calibrate"</b> under the room lighting. Press it again after changing rooms or opening the curtains.</li>
+    <li>For "Lighting", <b>"Dimming"</b> looks best: each building's lighting load rises and falls smoothly as the paper passes.</li>
+    <li>Press <b>"Start upload"</b>; the 13 boxes below start updating.</li>
+    <li>In another window, open the Energy Center at <a href="./?room=show&amp;lang=en" target="_blank"><code>?room=show&amp;lang=en</code></a> and project it on the big screen.</li>
+    <li>Sweep the paper slowly from A0 to A12, taking about 5–10 seconds.</li>
+  </ol>
+  <div class="tip">No board? Press "No board? Try the demo" in the console: a simulated cloud passes every 16 seconds, marked as a demo on screen.</div>
+
+  <h3>What to say</h3>
+  <div class="say">"These 13 light sensors are the sunlight sensors on the roofs of 13 campus buildings. This sheet of paper is a cloud. Wherever it goes, that building's solar power drops, the classrooms get darker and the lights switch on, and the whole campus's electricity use shows up on the Energy Center right away. Sensing, deciding, acting: that is the three-layer architecture of IoT energy saving."</div>
+  <div class="warn">Be honest about the limits: the LDR reads relative brightness (0–1023), not a calibrated lux value. How much extra power the lights use and how much solar is lost are estimated from each building's model, and the screen labels them as such.</div>
+</section>
+
+<section>
+  <h2><i>03</i>Reading the screen</h2>
+  <p>Every number carries a tag that says where it comes from:</p>
+  <table>
+    <tr><th>Tag</th><th>Meaning</th><th>Examples</th></tr>
+    <tr><td><span class="tag live">Live</span></td><td>External measurements or official data</td><td>Campus building outlines (OpenStreetMap), temperature and solar radiation, Taiwan's grid load and generation mix (Taipower), emission factor 0.467 kg/kWh</td></tr>
+    <tr><td><span class="tag est">Estimated</span></td><td>Calculated from real data</td><td>Building loads, campus demand, solar output, electricity cost, CO₂</td></tr>
+    <tr><td><span class="tag sim">Simulated</span></td><td>Engineering model without real measurements</td><td>Chillers, sensor nodes, battery storage</td></tr>
+  </table>
+  <table>
+    <tr><th>Panel</th><th>What it shows</th></tr>
+    <tr><td>Top eight tiles</td><td>Demand (as % of contract capacity), campus load, solar, battery, grid import, energy and cost today, outdoor conditions</td></tr>
+    <tr><td>01 Daily load curve</td><td>White line: today's actual load; dashed: forecast; red dashed: contract capacity; bottom band: time-of-use tariff periods</td></tr>
+    <tr><td>02 Top buildings</td><td>The 8 buildings using the most power now; click one to see its details on the right</td></tr>
+    <tr><td>03 Taiwan power grid</td><td>Taipower's live load, operating reserve, and generation mix</td></tr>
+    <tr><td>04 Campus map</td><td>Real building outlines; warmer colours use more power; ◆ chiller plant, ■ rooftop solar; north is to the left</td></tr>
+    <tr><td>05 Energy flow</td><td>Power flowing into campus from solar, the grid and battery storage</td></tr>
+    <tr><td>06 Building details</td><td>Load breakdown, chillers and sensor nodes of the selected building; live light-sensor readings at the top right</td></tr>
+    <tr><td>07 MQTT messages</td><td>Every message the Energy Center sends and receives, just like the data flow of a real IoT system; online sensor nodes are listed below</td></tr>
+    <tr><td>08 Alerts &amp; events</td><td>Contract capacity exceeded, chiller trips, buildings switching lights on, and more</td></tr>
+    <tr><td>09 Scenarios</td><td>Cloud cover, heat wave, large event, chiller trip, node offline, grid outage, demand response drill: press one to see how the system reacts</td></tr>
+    <tr><td>10 Time</td><td>×60, ×600, ×1440 fast-forward: a whole day in one minute</td></tr>
+  </table>
+  <div class="tip">Contract capacity, battery storage, solar capacity and the chiller set-up are assumed values for now and will be updated once the university provides real data.</div>
+</section>
+
+</main>
+<script>
+// 網址加 ?lang=en：顯示英文版
+if (new URLSearchParams(location.search).get('lang') === 'en') {
+  document.documentElement.lang = 'en';
+  document.title = 'Energy Center Guide';
+  document.getElementById('zh').hidden = true;
+  document.getElementById('en').hidden = false;
+  for (const e of document.querySelectorAll('[data-en]')) e.textContent = e.dataset.en;
+  document.getElementById('back').href = './?lang=en';
+}
+</script>
 </body>
 </html>

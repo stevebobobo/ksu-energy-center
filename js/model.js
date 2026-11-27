@@ -1,6 +1,7 @@
 // 校園能源模型：不碰畫面，瀏覽器和 Node 都能跑。
 // 輸入是時間與氣象（真實資料），輸出是各棟用電、冰水主機、太陽能、儲能、購電的推估值。
 import { PLANT, TARIFF, TYPES, SCHEDULES, EMISSION_KG_PER_KWH, SENSOR } from './config.js';
+import { t as tr, TYPE_EN } from './i18n.js';
 
 const H8  = 8 * 3600e3;          // 一律用台北時間（UTC+8）計算，不受瀏覽器時區影響
 const DAY = 864e5;
@@ -40,7 +41,7 @@ export function tariffAt(ms) {
   if (t.dow === 0) band = 'off';
   else if (summer) band = t.hour < 9 ? 'off' : t.dow === 6 ? 'sat' : (t.hour >= 16 && t.hour < 22) ? 'peak' : 'half';
   else band = (t.hour < 6 || (t.hour >= 11 && t.hour < 14)) ? 'off' : t.dow === 6 ? 'sat' : 'half';
-  return { band, summer, rate: TARIFF.rate[summer ? 'summer' : 'nonSummer'][band], label: TARIFF.label[band] };
+  return { band, summer, rate: TARIFF.rate[summer ? 'summer' : 'nonSummer'][band], label: tr(TARIFF.label[band], TARIFF.labelEn[band]) };
 }
 
 // 濕球溫度（Stull 2011 近似式），冷卻水塔出水溫度由它決定
@@ -62,7 +63,7 @@ export class CampusModel {
     this.buildings = campus.buildings.map(src => {
       const type   = TYPES[src.type];
       const peakKw = src.gfa * type.w / 1000;
-      const b = { ...src, typeLabel: type.label, cfg: type, peakKw, noise: 0 };
+      const b = { ...src, typeLabel: tr(type.label, TYPE_EN[src.type]), cfg: type, peakKw, noise: 0 };
 
       if (src.plant) {
         const hvacDesign = peakKw * type.hvac;
@@ -73,11 +74,11 @@ export class CampusModel {
         b.chillers = Array.from({ length: n }, (_, i) => ({ id: `CH-${i + 1}`, tripped: false }));
       }
       b.nodes = [
-        { id: `${src.id}-M01`, kind: '總電表',   unit: 'kW' },
-        { id: `${src.id}-T01`, kind: '室內溫度', unit: '°C' },
-        { id: `${src.id}-H01`, kind: '室內濕度', unit: '%' },
+        { id: `${src.id}-M01`, kind: tr('總電表', 'Main meter'),   unit: 'kW' },
+        { id: `${src.id}-T01`, kind: tr('室內溫度', 'Indoor temp.'), unit: '°C' },
+        { id: `${src.id}-H01`, kind: tr('室內濕度', 'Indoor RH'), unit: '%' },
         { id: `${src.id}-C01`, kind: 'CO₂',     unit: 'ppm' },
-        { id: `${src.id}-L01`, kind: '照度',     unit: 'lux' },
+        { id: `${src.id}-L01`, kind: tr('照度', 'Illuminance'),     unit: 'lux' },
       ].map(n => ({ ...n, value: 0, offline: false }));
       return b;
     });
@@ -199,8 +200,8 @@ export class CampusModel {
     const dr = sc.dr ? this.dr : null;
     if (dr) {
       for (; dr.told < dr.acks.length; dr.told++) {
-        const a = dr.acks[dr.told], names = a.ids.map(id => this.byId[id] && this.byId[id].name).filter(Boolean).join('、') || '未認養大樓';
-        this.events.push({ t: ms, level: 'info', text: `第 ${a.rank} 名回應：${a.by.replace(/</g, '&lt;')}（${names}）按下按鈕卸載，${a.sec.toFixed(1)} 秒` });
+        const a = dr.acks[dr.told], names = a.ids.map(id => this.byId[id] && this.byId[id].name).filter(Boolean).join(tr('、', ', ')) || tr('未認養大樓', 'no building');
+        this.events.push({ t: ms, level: 'info', text: tr(`第 ${a.rank} 名回應：${a.by.replace(/</g, '&lt;')}（${names}）按下按鈕卸載，${a.sec.toFixed(1)} 秒`, `#${a.rank} response: ${a.by.replace(/</g, '&lt;')} (${names}) pressed the button to shed load in ${a.sec.toFixed(1)} s`) });
       }
     }
     for (const b of this.buildings) {
@@ -208,8 +209,8 @@ export class CampusModel {
       const sn = this.sensors && this.sensors.get(b.id);
       b.sensor = sn && wall - sn.t < SENSOR.staleMs ? sn : null;
       const wasOn = this.latch['lt-' + b.id];
-      this.alert('lt-' + b.id, !!(b.sensor && b.sensor.on), 'info', b.sensor ? `${b.name} 天暗自動開燈（${b.sensor.by} 光敏 ${b.sensor.v}）` : '');
-      if (wasOn && !(b.sensor && b.sensor.on) && b.sensor) this.events.push({ t: ms, level: 'info', text: `${b.name} 恢復日光，照明調降（${b.sensor.by}）` });
+      this.alert('lt-' + b.id, !!(b.sensor && b.sensor.on), 'info', b.sensor ? tr(`${b.name} 天暗自動開燈（${b.sensor.by} 光敏 ${b.sensor.v}）`, `${b.name}: dark, lights switched on (${b.sensor.by}, light sensor ${b.sensor.v})`) : '');
+      if (wasOn && !(b.sensor && b.sensor.on) && b.sensor) this.events.push({ t: ms, level: 'info', text: tr(`${b.name} 恢復日光，照明調降（${b.sensor.by}）`, `${b.name}: daylight back, lights dimmed (${b.sensor.by})`) });
       b.noise += -b.noise * dt / 600 + 0.03 * Math.sqrt(Math.min(1, dt / 600)) * (Math.random() * 2 - 1) * 1.7;
       const r = this.loadOf(b, t, wx, true);
       b.live = r;
@@ -230,19 +231,19 @@ export class CampusModel {
     const net = load - pv;
     const canDis = Math.min(ess.kw, Math.max(0, (this.soc - ess.socMin) * ess.kwh * 3600 / dt * ess.eff));
     const canChg = Math.min(ess.kw, Math.max(0, (ess.socMax - this.soc) * ess.kwh * 3600 / dt / ess.eff));
-    let essKw = 0, mode = '待機';       // 正值放電、負值充電
+    let essKw = 0, mode = tr('待機', 'standby');       // 正值放電、負值充電
     if (sc.outage) {
-      essKw = clamp(net, -canChg, canDis); mode = essKw > 0 ? '孤島供電' : '孤島充電';
+      essKw = clamp(net, -canChg, canDis); mode = essKw > 0 ? tr('孤島供電', 'island supply') : tr('孤島充電', 'island charging');
     } else if (net < 0) {
-      essKw = -Math.min(canChg, -net); mode = '餘電充電';
+      essKw = -Math.min(canChg, -net); mode = tr('餘電充電', 'surplus charging');
     } else if (net > PLANT.contractKw * 0.88) {
-      essKw = Math.min(canDis, net - PLANT.contractKw * 0.88); mode = '削峰放電';
+      essKw = Math.min(canDis, net - PLANT.contractKw * 0.88); mode = tr('削峰放電', 'peak shaving');
     } else if (tar.band === 'peak' && this.soc > 0.25) {
-      essKw = Math.min(canDis, 300, net); mode = '尖峰放電';
+      essKw = Math.min(canDis, 300, net); mode = tr('尖峰放電', 'peak discharge');
     } else if (tar.band === 'off' && this.soc < ess.socMax - 0.01) {
-      essKw = -Math.min(canChg, 300, Math.max(0, PLANT.contractKw * 0.8 - net)); mode = essKw < 0 ? '離峰充電' : '待機';
+      essKw = -Math.min(canChg, 300, Math.max(0, PLANT.contractKw * 0.8 - net)); mode = essKw < 0 ? tr('離峰充電', 'off-peak charging') : tr('待機', 'standby');
     }
-    if (Math.abs(essKw) < 1) { essKw = 0; if (!sc.outage) mode = '待機'; }
+    if (Math.abs(essKw) < 1) { essKw = 0; if (!sc.outage) mode = tr('待機', 'standby'); }
     this.soc = clamp(this.soc - (essKw > 0 ? essKw / ess.eff : essKw * ess.eff) * dt / 3600 / ess.kwh, 0, 1);
 
     let grid = sc.outage ? 0 : net - essKw;
@@ -267,18 +268,18 @@ export class CampusModel {
     }
 
     const ratio = demand / PLANT.contractKw;
-    this.alert('d90',  ratio >= 0.9 && ratio < 1, 'warn', `需量達契約容量 ${Math.round(ratio * 100)}%，儲能啟動削峰`);
-    this.alert('d100', ratio >= 1, 'crit', `需量 ${Math.round(demand)} kW 超過契約容量 ${PLANT.contractKw} kW，將產生超約附加費`);
-    this.alert('trip', sc.trip, 'crit', `${big.name} 冰水主機 CH-1 跳機，其餘主機加載`);
-    this.alert('unmet', unmetRt > 15, 'warn', `冷房能力不足 ${Math.round(unmetRt)} RT，冰水出水溫上升`);
-    this.alert('out',  sc.outage, 'crit', '台電饋線停電，校園切換孤島運轉，非必要負載卸載');
-    this.alert('short', shortfall > 20, 'crit', `孤島供電不足，缺口 ${Math.round(shortfall)} kW`);
-    this.alert('soc',  this.soc <= 0.15, 'warn', `儲能電量剩 ${Math.round(this.soc * 100)}%`);
-    this.alert('cloud', sc.cloud, 'warn', '雲層通過，太陽能發電驟降');
-    this.alert('heat', sc.heat, 'warn', `外氣溫度升至 ${wx.T.toFixed(1)}°C，空調負載增加`);
-    this.alert('event', sc.event, 'info', '體育館大型活動進場，教學區滿載');
-    this.alert('dr',   sc.dr, 'crit', '需量反應演練：台電通知全校卸載，各組 LED 閃爍時請按下按鈕回應');
-    this.alert('off',  sc.offline, 'warn', `感測節點 ${offNode.id}（工程學院一館 室內溫度）失去連線`);
+    this.alert('d90',  ratio >= 0.9 && ratio < 1, 'warn', tr(`需量達契約容量 ${Math.round(ratio * 100)}%，儲能啟動削峰`, `Demand at ${Math.round(ratio * 100)}% of contract capacity, battery starts peak shaving`));
+    this.alert('d100', ratio >= 1, 'crit', tr(`需量 ${Math.round(demand)} kW 超過契約容量 ${PLANT.contractKw} kW，將產生超約附加費`, `Demand ${Math.round(demand)} kW exceeds the ${PLANT.contractKw} kW contract, penalty charges apply`));
+    this.alert('trip', sc.trip, 'crit', tr(`${big.name} 冰水主機 CH-1 跳機，其餘主機加載`, `${big.name}: chiller CH-1 tripped, the other chillers take the load`));
+    this.alert('unmet', unmetRt > 15, 'warn', tr(`冷房能力不足 ${Math.round(unmetRt)} RT，冰水出水溫上升`, `Cooling short by ${Math.round(unmetRt)} RT, chilled water temperature rising`));
+    this.alert('out',  sc.outage, 'crit', tr('台電饋線停電，校園切換孤島運轉，非必要負載卸載', 'Taipower feeder outage: campus in island mode, non-essential loads shed'));
+    this.alert('short', shortfall > 20, 'crit', tr(`孤島供電不足，缺口 ${Math.round(shortfall)} kW`, `Island supply short by ${Math.round(shortfall)} kW`));
+    this.alert('soc',  this.soc <= 0.15, 'warn', tr(`儲能電量剩 ${Math.round(this.soc * 100)}%`, `Battery down to ${Math.round(this.soc * 100)}%`));
+    this.alert('cloud', sc.cloud, 'warn', tr('雲層通過，太陽能發電驟降', 'Clouds passing over, solar output drops sharply'));
+    this.alert('heat', sc.heat, 'warn', tr(`外氣溫度升至 ${wx.T.toFixed(1)}°C，空調負載增加`, `Outdoor temperature up to ${wx.T.toFixed(1)} °C, AC load rising`));
+    this.alert('event', sc.event, 'info', tr('體育館大型活動進場，教學區滿載', 'Large event at the gym, teaching area at full load'));
+    this.alert('dr',   sc.dr, 'crit', tr('需量反應演練：台電通知全校卸載，各組 LED 閃爍時請按下按鈕回應', 'Demand response drill: Taipower asks the campus to shed load. Teams press the button when their LED blinks'));
+    this.alert('off',  sc.offline, 'warn', tr(`感測節點 ${offNode.id}（工程學院一館 室內溫度）失去連線`, `Sensor node ${offNode.id} (Engineering I, indoor temp.) lost connection`));
 
     this.s = {
       t: ms, wx, tar, load, pv, grid, demand, ratio, essKw, essMode: mode, soc: this.soc,

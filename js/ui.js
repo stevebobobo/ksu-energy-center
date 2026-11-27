@@ -1,6 +1,7 @@
 // 畫面繪製：只讀模型狀態，不做任何計算決策。
 import { PLANT, MQTT, EMISSION_KG_PER_KWH, SENSOR_BUILDINGS } from './config.js';
 import { taipei, dayStart, tariffAt } from './model.js';
+import { LANG_EN, t, MIX_EN, applyStatic } from './i18n.js';
 
 const $   = id => document.getElementById(id);
 const NS  = 'http://www.w3.org/2000/svg';
@@ -12,8 +13,8 @@ const svg = (tag, attrs = {}, text) => {
 };
 const fmt  = (n, d = 0) => (Number.isFinite(n) ? n : 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 const pad2 = n => String(n).padStart(2, '0');
-const WEEK = '日一二三四五六';
-const TAG  = { live: '<span class="tag live">真實</span>', est: '<span class="tag est">推估</span>', sim: '<span class="tag sim">模擬</span>' };
+const WEEK = LANG_EN ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : '日一二三四五六';
+const TAG  = { live: `<span class="tag live">${t('真實', 'Live')}</span>`, est: `<span class="tag est">${t('推估', 'Estimated')}</span>`, sim: `<span class="tag sim">${t('模擬', 'Simulated')}</span>` };
 
 export const clockText = ms => { const t = taipei(ms); return `${t.y}-${pad2(t.mo)}-${pad2(t.d)}(${WEEK[t.dow]}) ${pad2(t.hh)}:${pad2(t.mm)}:${pad2(t.ss)}`; };
 const hm = ms => { const t = taipei(ms); return `${pad2(t.hh)}:${pad2(t.mm)}`; };
@@ -31,7 +32,7 @@ function ramp(f) {
 }
 
 const MIX_COLOR = { nuclear: '#b9c4d4', coal: '#5c6f88', cogen: '#7f93ad', gas: '#4a9be8', oil: '#3a4a60', solar: '#f2d268', wind: '#9ad0f5', hydro: '#1f6fb5', other: '#d4a92a', storage: '#e0492f' };
-const LAMP = { G: ['#3fae5a', '供電充裕'], Y: ['#f2d268', '供電吃緊'], O: ['#f08a2c', '供電警戒'], R: ['#e0492f', '限電警戒'], B: ['#111', '限電準備'] };
+const LAMP = { G: ['#3fae5a', t('供電充裕', 'ample')], Y: ['#f2d268', t('供電吃緊', 'tight')], O: ['#f08a2c', t('供電警戒', 'alert')], R: ['#e0492f', t('限電警戒', 'rationing alert')], B: ['#111', t('限電準備', 'rationing')] };
 
 const SCENARIOS = [
   ['cloud',   '烏雲遮日'],
@@ -43,7 +44,6 @@ const SCENARIOS = [
   ['dr',      '需量反應演練', true],
 ];
 // 中英對照：網址加 ?lang=en 時，演練相關的文字後面附英文小字（和 phone.html 的對照表一致）
-const LANG_EN = typeof location !== 'undefined' && new URLSearchParams(location.search).get('lang') === 'en';
 const en = s => LANG_EN && s ? `<span class="en">${s}</span>` : '';
 const SC_EN = { cloud: 'Cloud cover', heat: 'Heat wave', event: 'Large event', trip: 'Chiller trip', offline: 'Node offline', outage: 'Grid outage', dr: 'Demand response drill' };
 const TITLE_EN = { trip: 'Chiller trip', outage: 'Grid outage', offline: 'Sensor node offline', cloud: 'Cloud cover', heat: 'Heat wave', event: 'Large event' };
@@ -57,13 +57,15 @@ const LABEL_EN = {
 };
 // 警報算「已解除」：有組回報過，而且回報過的組都完成了
 const solvedAlarm = a => a.groups.size > 0 && [...a.groups.values()].every(g => g.done != null);
-const SPEEDS = [[1, '即時'], [60, '×60'], [600, '×600'], [1440, '×1440（一分鐘一天）']];
+const SPEEDS = [[1, t('即時', 'Live')], [60, '×60'], [600, '×600'], [1440, t('×1440（一分鐘一天）', '×1440 (1 min = 1 day)')]];
 
 export class View {
   constructor(campus, model, actions) {
     this.model = model;
     this.selected = 'lib';
     this.actions = actions;
+    applyStatic();
+    if (LANG_EN) $('guide-link').href = 'guide.html?lang=en';
     this.buildMap(campus);
     this.buildFlow();
     this.buildButtons();
@@ -151,10 +153,10 @@ export class View {
       wPv:   wire('M150 31 H205 V52 H240', '#f2d268'),
       wGrid: wire('M150 89 H205 V68 H240', '#4a9be8'),
       wEss:  wire('M360 60 H450', '#f2d268'),
-      pv:   box(20, 4, 130, 54, '太陽能'),
-      grid: box(20, 62, 130, 54, '台電購電'),
-      load: box(240, 20, 120, 80, '校園負載', 'hub'),
-      ess:  box(450, 20, 130, 80, '儲能系統'),
+      pv:   box(20, 4, 130, 54, t('太陽能', 'Solar')),
+      grid: box(20, 62, 130, 54, t('台電購電', 'Grid import')),
+      load: box(240, 20, 120, 80, t('校園負載', 'Campus load'), 'hub'),
+      ess:  box(450, 20, 130, 80, t('儲能系統', 'Battery storage')),
     };
   }
 
@@ -209,40 +211,40 @@ export class View {
     const { weather, taipower, link } = ctx;
     const live = ctx.speed === 1;
     $('clock').textContent = clockText(s.t);
-    $('clock-label').textContent = live ? '台北時間' : `模擬時間 ×${ctx.speed}`;
+    $('clock-label').textContent = live ? t('台北時間', 'Taipei time') : t(`模擬時間 ×${ctx.speed}`, `Simulated ×${ctx.speed}`);
     $('clock').parentElement.classList.toggle('sim', !live);
 
     const wx = weather.status === 'live'
-      ? ['ok', s.wx.kind === 'live' ? `即時觀測 ${hm(weather.current.t)}` : '今日逐時資料']
-      : ['bad', '離線，改用氣候平均'];
+      ? ['ok', s.wx.kind === 'live' ? t(`即時觀測 ${hm(weather.current.t)}`, `observed ${hm(weather.current.t)}`) : t('今日逐時資料', "today's hourly")]
+      : ['bad', t('離線，改用氣候平均', 'offline, climate average')];
     const age = taipower.ageMin();
-    const tp  = age == null ? ['bad', '無資料'] : [age <= 30 ? 'ok' : '', `${hm(Date.parse(taipower.data.gen.time + '+08:00'))} 快照`];
-    const mq  = { online: ['ok', '已連線'], connecting: ['', '連線中'], off: ['bad', '未啟用'] }[link.status];
+    const tp  = age == null ? ['bad', t('無資料', 'no data')] : [age <= 30 ? 'ok' : '', t(`${hm(Date.parse(taipower.data.gen.time + '+08:00'))} 快照`, `snapshot ${hm(Date.parse(taipower.data.gen.time + '+08:00'))}`)];
+    const mq  = { online: ['ok', t('已連線', 'online')], connecting: ['', t('連線中', 'connecting')], off: ['bad', t('未啟用', 'off')] }[link.status];
     const room = MQTT.base.split('/').pop();
-    $('chips').innerHTML = [['氣象', wx], ['台電', tp], ['MQTT', mq], ...(room !== 'demo' ? [['頻道', ['ok', room]]] : [])]
+    $('chips').innerHTML = [[t('氣象', 'Weather'), wx], [t('台電', 'Taipower'), tp], ['MQTT', mq], ...(room !== 'demo' ? [[t('頻道', 'Channel'), ['ok', room]]] : [])]
       .map(([k, [cls, v]]) => `<span class="chip ${cls}">${k}<b>${v}</b></span>`).join('');
   }
 
   renderKpis(ctx, s) {
     const a = s.acc, pct = s.ratio * 100;
     const cells = [
-      { h: '即時需量', tag: 'est', v: fmt(s.demand), u: 'kW', alarm: pct >= 100,
-        meter: pct, s: `契約 ${fmt(PLANT.contractKw)} kW 的 <b>${fmt(pct)}%</b>` },
-      { h: '校園總負載', tag: 'est', v: fmt(s.load), u: 'kW', alarm: s.shortfall > 20,
-        s: s.shortfall > 20 ? `供電缺口 <b>${fmt(s.shortfall)} kW</b>` : `空調占 <b>${fmt(s.hvacKw / s.load * 100)}%</b>` },
-      { h: '太陽能發電', tag: 'est', v: fmt(s.pv), u: 'kW',
-        s: `裝置 ${fmt(this.model.pvKwp)} kWp · 供應 <b>${fmt(s.renewShare * 100)}%</b>` },
-      { h: '儲能電量', tag: 'sim', v: fmt(s.soc * 100), u: '%',
+      { h: t('即時需量', 'Demand'), tag: 'est', v: fmt(s.demand), u: 'kW', alarm: pct >= 100,
+        meter: pct, s: t(`契約 ${fmt(PLANT.contractKw)} kW 的 <b>${fmt(pct)}%</b>`, `<b>${fmt(pct)}%</b> of ${fmt(PLANT.contractKw)} kW contract`) },
+      { h: t('校園總負載', 'Campus load'), tag: 'est', v: fmt(s.load), u: 'kW', alarm: s.shortfall > 20,
+        s: s.shortfall > 20 ? t(`供電缺口 <b>${fmt(s.shortfall)} kW</b>`, `Shortfall <b>${fmt(s.shortfall)} kW</b>`) : t(`空調占 <b>${fmt(s.hvacKw / s.load * 100)}%</b>`, `AC share <b>${fmt(s.hvacKw / s.load * 100)}%</b>`) },
+      { h: t('太陽能發電', 'Solar output'), tag: 'est', v: fmt(s.pv), u: 'kW',
+        s: t(`裝置 ${fmt(this.model.pvKwp)} kWp · 供應 <b>${fmt(s.renewShare * 100)}%</b>`, `${fmt(this.model.pvKwp)} kWp installed · covers <b>${fmt(s.renewShare * 100)}%</b>`) },
+      { h: t('儲能電量', 'Battery charge'), tag: 'sim', v: fmt(s.soc * 100), u: '%',
         s: `${s.essMode} <b>${s.essKw ? fmt(Math.abs(s.essKw)) + ' kW' : ''}</b>` },
-      { h: '台電購電', tag: 'est', v: fmt(s.grid), u: 'kW', alarm: this.model.scenario.outage,
-        s: this.model.scenario.outage ? '<b>饋線停電</b>' : `${s.tar.label} <b>${s.tar.rate.toFixed(2)} 元/度</b>` },
-      { h: '今日用電', tag: 'est', v: fmt(a.loadKwh), u: '度',
-        s: `購電 <b>${fmt(a.gridKwh)}</b> · 自發 <b>${fmt(a.pvKwh)}</b>` },
-      { h: '今日電費', tag: 'est', v: fmt(a.cost), u: '元',
-        s: `碳排 <b>${fmt(a.co2)} kg</b>（${EMISSION_KG_PER_KWH}/度）` },
+      { h: t('台電購電', 'Grid import'), tag: 'est', v: fmt(s.grid), u: 'kW', alarm: this.model.scenario.outage,
+        s: this.model.scenario.outage ? t('<b>饋線停電</b>', '<b>Feeder outage</b>') : `${s.tar.label} <b>${s.tar.rate.toFixed(2)} ${t('元/度', 'NT$/kWh')}</b>` },
+      { h: t('今日用電', 'Energy today'), tag: 'est', v: fmt(a.loadKwh), u: t('度', 'kWh'),
+        s: t(`購電 <b>${fmt(a.gridKwh)}</b> · 自發 <b>${fmt(a.pvKwh)}</b>`, `grid <b>${fmt(a.gridKwh)}</b> · solar <b>${fmt(a.pvKwh)}</b>`) },
+      { h: t('今日電費', 'Cost today'), tag: 'est', v: fmt(a.cost), u: t('元', 'NT$'),
+        s: t(`碳排 <b>${fmt(a.co2)} kg</b>（${EMISSION_KG_PER_KWH}/度）`, `CO₂ <b>${fmt(a.co2)} kg</b> (${EMISSION_KG_PER_KWH} kg/kWh)`) },
       // 熱浪、烏雲情境會改動氣象值，這時就不能再標「真實」
-      { h: '外氣條件', tag: s.wx.kind === 'climate' || this.model.scenario.heat || this.model.scenario.cloud ? 'sim' : 'live', v: s.wx.T.toFixed(1), u: '°C',
-        s: `濕度 <b>${fmt(s.wx.RH)}%</b> · 日射 <b>${fmt(s.wx.G)} W/m²</b>` },
+      { h: t('外氣條件', 'Outdoor'), tag: s.wx.kind === 'climate' || this.model.scenario.heat || this.model.scenario.cloud ? 'sim' : 'live', v: s.wx.T.toFixed(1), u: '°C',
+        s: t(`濕度 <b>${fmt(s.wx.RH)}%</b> · 日射 <b>${fmt(s.wx.G)} W/m²</b>`, `RH <b>${fmt(s.wx.RH)}%</b> · sun <b>${fmt(s.wx.G)} W/m²</b>`) },
     ];
     $('kpis').innerHTML = cells.map(c => `
       <div class="kpi${c.alarm ? ' alarm' : ''}">
@@ -263,7 +265,7 @@ export class View {
         const sn = b.sensor;
         sh.cloud.setAttribute('opacity', sn ? (0.15 + 0.75 * sn.s).toFixed(2) : 0);
         const ack = b.drAck, wait = !ack && sn && this.model.scenario.dr;
-        sh.tag.textContent = ack ? `✓ 卸載 第${ack.rank}名` : wait ? '⚠ 等待回應' : sn ? (sn.dim ? `◐ 調光 ${Math.round((0.3 + 0.7 * sn.s) * 100)}%` : `${sn.on ? '● 開燈' : '○ 日光'} ${sn.v}`) : '';
+        sh.tag.textContent = ack ? t(`✓ 卸載 第${ack.rank}名`, `✓ shed #${ack.rank}`) : wait ? t('⚠ 等待回應', '⚠ waiting') : sn ? (sn.dim ? t(`◐ 調光 ${Math.round((0.3 + 0.7 * sn.s) * 100)}%`, `◐ dim ${Math.round((0.3 + 0.7 * sn.s) * 100)}%`) : `${sn.on ? t('● 開燈', '● lights on') : t('○ 日光', '○ daylight')} ${sn.v}`) : '';
         sh.tag.classList.toggle('on', !!(ack || (sn && sn.on)));
         sh.tag.classList.toggle('dr-wait', !!wait);
         sh.path.classList.toggle('lit', !!(sn && sn.on));
@@ -276,7 +278,7 @@ export class View {
     set(f.pv, fmt(s.pv), 'kW');
     set(f.grid, fmt(s.grid), 'kW');
     set(f.load, fmt(s.load), 'kW');
-    set(f.ess, `${fmt(s.soc * 100)}%`, s.essKw ? `${s.essMode} ${fmt(Math.abs(s.essKw))} kW` : '待機');
+    set(f.ess, `${fmt(s.soc * 100)}%`, s.essKw ? `${s.essMode} ${fmt(Math.abs(s.essKw))} kW` : t('待機', 'standby'));
     f.wPv.classList.toggle('idle', s.pv < 5);
     f.wGrid.classList.toggle('idle', s.grid < 5);
     f.wEss.classList.toggle('idle', !s.essKw);
@@ -317,7 +319,7 @@ export class View {
     out += `<line x1="${L}" x2="${W - R}" y1="${y(PLANT.contractKw)}" y2="${y(PLANT.contractKw)}" stroke="#e0492f" stroke-width="1" stroke-dasharray="5 3"/>`;
     out += `<line x1="${x(s.t)}" x2="${x(s.t)}" y1="${T}" y2="${H - B}" stroke="#f2d268" stroke-width="1"/>`;
     el.innerHTML = out;
-    $('curve-note').textContent = `今日最高需量 ${fmt(s.acc.maxDemand)} kW · 底部色帶為時間電價時段`;
+    $('curve-note').textContent = t(`今日最高需量 ${fmt(s.acc.maxDemand)} kW · 底部色帶為時間電價時段`, `Peak demand today ${fmt(s.acc.maxDemand)} kW · bottom band = time-of-use tariff`);
   }
 
   renderRank() {
@@ -335,14 +337,14 @@ export class View {
   renderDetail(s) {
     const b = this.model.byId[this.selected], r = b.live;
     $('detail-title').textContent = b.name;
-    $('detail-note').textContent = `${b.typeLabel} · 樓地板 ${fmt(b.gfa)} m² · ${b.floors} 層${b.floorsSource === 'assumed' ? '（假設）' : ''}`;
-    const parts = [['基載', r.base, '#5c6f88'], ['照明插座', r.light, '#4a9be8'], ['空調', r.hvac, '#d4a92a']];
+    $('detail-note').textContent = t(`${b.typeLabel} · 樓地板 ${fmt(b.gfa)} m² · ${b.floors} 層${b.floorsSource === 'assumed' ? '（假設）' : ''}`, `${b.typeLabel} · floor area ${fmt(b.gfa)} m² · ${b.floors} floors${b.floorsSource === 'assumed' ? ' (assumed)' : ''}`);
+    const parts = [[t('基載', 'Base load'), r.base, '#5c6f88'], [t('照明插座', 'Lights & plugs'), r.light, '#4a9be8'], [t('空調', 'Air conditioning'), r.hvac, '#d4a92a']];
 
     let html = `
       <div class="d-head">
         <div><div class="big">${fmt(r.kw)}<small>kW</small>${TAG.est}</div>
-          <p>負載率 <b>${fmt(b.factor * 100)}%</b> · 使用率 <b>${fmt(r.occ * 100)}%</b>${b.pvKwp ? ` · 屋頂太陽能 <b>${fmt(b.pv)} kW</b> / ${b.pvKwp} kWp` : ''}</p></div>
-        <p>${r.shed ? '<b style="color:var(--red)">停電卸載中</b>' : ''}${b.sensor ? `<b class="sn-note">光敏 ${b.sensor.v} · ${b.sensor.dim ? '調光 ' + Math.round((0.3 + 0.7 * b.sensor.s) * 100) + '%' : b.sensor.on ? '天暗開燈' : '日光充足'}<br><small>${b.sensor.by.replace(/</g, '&lt;')} 即時上傳 ${TAG.live}</small></b>` : ''}</p>
+          <p>${t('負載率', 'Load factor')} <b>${fmt(b.factor * 100)}%</b> · ${t('使用率', 'Occupancy')} <b>${fmt(r.occ * 100)}%</b>${b.pvKwp ? ` · ${t('屋頂太陽能', 'Rooftop solar')} <b>${fmt(b.pv)} kW</b> / ${b.pvKwp} kWp` : ''}</p></div>
+        <p>${r.shed ? `<b style="color:var(--red)">${t('停電卸載中', 'Shed (outage)')}</b>` : ''}${b.sensor ? `<b class="sn-note">${t('光敏', 'Light sensor')} ${b.sensor.v} · ${b.sensor.dim ? t('調光 ', 'dimmed ') + Math.round((0.3 + 0.7 * b.sensor.s) * 100) + '%' : b.sensor.on ? t('天暗開燈', 'dark, lights on') : t('日光充足', 'enough daylight')}<br><small>${b.sensor.by.replace(/</g, '&lt;')} ${t('即時上傳', 'live upload')} ${TAG.live}</small></b>` : ''}</p>
       </div>
       <div class="split">${parts.map(([, v, c]) => `<i style="width:${v / r.kw * 100}%;background:${c}"></i>`).join('')}</div>
       <div class="split-legend">${parts.map(([k, v, c]) => `<div><b style="background:${c}"></b>${k}<span>${fmt(v)} kW</span></div>`).join('')}</div>`;
@@ -351,53 +353,54 @@ export class View {
       const p = r.plant, cfg = b.plantCfg;
       let running = p.on;
       html += `
-        <h4>冰水主機房${TAG.sim}</h4>
+        <h4>${t('冰水主機房', 'Chiller plant')}${TAG.sim}</h4>
         <div class="plant-sum">
-          <div><span>冷房負載</span><b>${fmt(p.q)}<small>RT</small></b></div>
-          <div><span>冰水 出 / 回</span><b>${p.chws.toFixed(1)}<small>/</small>${p.chwr.toFixed(1)}<small>°C</small></b></div>
-          <div><span>冷卻水 進 / 出</span><b>${p.cwIn.toFixed(1)}<small>/</small>${p.cwOut.toFixed(1)}<small>°C</small></b></div>
-          <div><span>主機效率</span><b>${p.on ? p.kwPerRt.toFixed(2) : '—'}<small>kW/RT</small></b></div>
+          <div><span>${t('冷房負載', 'Cooling load')}</span><b>${fmt(p.q)}<small>RT</small></b></div>
+          <div><span>${t('冰水 出 / 回', 'Chilled water out / back')}</span><b>${p.chws.toFixed(1)}<small>/</small>${p.chwr.toFixed(1)}<small>°C</small></b></div>
+          <div><span>${t('冷卻水 進 / 出', 'Cooling water in / out')}</span><b>${p.cwIn.toFixed(1)}<small>/</small>${p.cwOut.toFixed(1)}<small>°C</small></b></div>
+          <div><span>${t('主機效率', 'Efficiency')}</span><b>${p.on ? p.kwPerRt.toFixed(2) : '—'}<small>kW/RT</small></b></div>
         </div>
-        <table><tr><th>主機</th><th>容量</th><th>狀態</th><th>負載率</th><th>耗電</th><th>COP</th></tr>
+        <table><tr><th>${t('主機', 'Chiller')}</th><th>${t('容量', 'Size')}</th><th>${t('狀態', 'Status')}</th><th>${t('負載率', 'Load')}</th><th>${t('耗電', 'Power')}</th><th>COP</th></tr>
         ${b.chillers.map(c => {
           const on = !c.tripped && running-- > 0;
-          const st = c.tripped ? '<span class="st bad">跳機</span>' : on ? '<span class="st on">運轉</span>' : '<span class="st off">待機</span>';
+          const st = c.tripped ? `<span class="st bad">${t('跳機', 'tripped')}</span>` : on ? `<span class="st on">${t('運轉', 'running')}</span>` : `<span class="st off">${t('待機', 'standby')}</span>`;
           return `<tr><td class="id">${c.id}</td><td>${cfg.unitRt} RT</td><td>${st}</td><td>${on ? fmt(p.plr * 100) + '%' : '—'}</td><td>${on ? fmt(p.kwEach, 1) + ' kW' : '—'}</td><td>${on ? p.cop.toFixed(2) : '—'}</td></tr>`;
         }).join('')}
-        <tr><td>水泵/水塔/風機</td><td></td><td></td><td></td><td>${fmt(p.aux, 1)} kW</td><td></td></tr></table>`;
+        <tr><td>${t('水泵/水塔/風機', 'Pumps / towers / fans')}</td><td></td><td></td><td></td><td>${fmt(p.aux, 1)} kW</td><td></td></tr></table>`;
     }
 
     html += `
-      <h4>感測節點${TAG.sim}</h4>
-      <table><tr><th>節點</th><th>量測</th><th>讀值</th><th>狀態</th></tr>
-      ${b.nodes.map(n => `<tr><td class="id">${n.id}</td><td class="st">${n.kind}</td><td>${fmt(n.value, n.unit === '°C' ? 1 : 0)} ${n.unit}</td><td>${n.offline ? '<span class="st bad">離線</span>' : '<span class="st on">連線</span>'}</td></tr>`).join('')}
+      <h4>${t('感測節點', 'Sensor nodes')}${TAG.sim}</h4>
+      <table><tr><th>${t('節點', 'Node')}</th><th>${t('量測', 'Measures')}</th><th>${t('讀值', 'Reading')}</th><th>${t('狀態', 'Status')}</th></tr>
+      ${b.nodes.map(n => `<tr><td class="id">${n.id}</td><td class="st">${n.kind}</td><td>${fmt(n.value, n.unit === '°C' ? 1 : 0)} ${n.unit}</td><td>${n.offline ? `<span class="st bad">${t('離線', 'offline')}</span>` : `<span class="st on">${t('連線', 'online')}</span>`}</td></tr>`).join('')}
       </table>`;
     $('detail').innerHTML = html;
   }
 
   renderTaipower({ taipower }) {
     const d = taipower.data;
-    if (!d) { $('taipower').innerHTML = '<p style="color:var(--mute)">尚未取得台電快照（執行 node tools/fetch-taipower.mjs）</p>'; return; }
+    if (!d) { $('taipower').innerHTML = `<p style="color:var(--mute)">${t('尚未取得台電快照（執行 node tools/fetch-taipower.mjs）', 'No Taipower snapshot yet (run node tools/fetch-taipower.mjs)')}</p>`; return; }
     const l = d.load, lamp = LAMP[l.indicator] || LAMP.G, age = taipower.ageMin();
-    $('tp-note').textContent = `資料時間 ${d.gen.time.slice(11, 16)}（${age} 分鐘前）`;
+    $('tp-note').textContent = t(`資料時間 ${d.gen.time.slice(11, 16)}（${age} 分鐘前）`, `data ${d.gen.time.slice(11, 16)} (${age} min ago)`);
+    const mixLabel = m => LANG_EN ? MIX_EN[m.key] || m.label : m.label;
     $('taipower').innerHTML = `
       <div class="tp-nums">
-        <div><span>全台即時負載</span><b>${fmt(l.currMW)}<small>MW</small></b></div>
-        <div><span>使用率</span><b>${l.utilPct}<small>%</small></b></div>
-        <div><span>今日尖峰預估</span><b>${fmt(l.peakMW)}<small>MW</small></b></div>
-        <div><span>備轉容量率</span><b><i class="lamp" style="background:${lamp[0]}"></i>${l.reservePct}<small>% ${lamp[1]}</small></b></div>
+        <div><span>${t('全台即時負載', 'Taiwan load now')}</span><b>${fmt(l.currMW)}<small>MW</small></b></div>
+        <div><span>${t('使用率', 'Utilization')}</span><b>${l.utilPct}<small>%</small></b></div>
+        <div><span>${t('今日尖峰預估', 'Forecast peak')}</span><b>${fmt(l.peakMW)}<small>MW</small></b></div>
+        <div><span>${t('備轉容量率', 'Operating reserve')}</span><b><i class="lamp" style="background:${lamp[0]}"></i>${l.reservePct}<small>% ${lamp[1]}</small></b></div>
       </div>
-      <div class="mix">${d.gen.mix.map(m => `<i title="${m.label}" style="width:${m.mw / d.gen.totalMW * 100}%;background:${MIX_COLOR[m.key]}"></i>`).join('')}</div>
-      <div class="mix-legend">${d.gen.mix.filter(m => m.mw / d.gen.totalMW > 0.004).map(m => `<div><b style="background:${MIX_COLOR[m.key]}"></b>${m.label}<span>${fmt(m.mw / d.gen.totalMW * 100, 1)}%</span></div>`).join('')}</div>`;
+      <div class="mix">${d.gen.mix.map(m => `<i title="${mixLabel(m)}" style="width:${m.mw / d.gen.totalMW * 100}%;background:${MIX_COLOR[m.key]}"></i>`).join('')}</div>
+      <div class="mix-legend">${d.gen.mix.filter(m => m.mw / d.gen.totalMW > 0.004).map(m => `<div><b style="background:${MIX_COLOR[m.key]}"></b>${mixLabel(m)}<span>${fmt(m.mw / d.gen.totalMW * 100, 1)}%</span></div>`).join('')}</div>`;
   }
 
   renderMqtt({ link }) {
-    $('mqtt-note').textContent = link.status === 'online' ? `發布 ${link.tx} · 接收 ${link.rx}` : 'broker 未連線，戰情室以離線模式運作';
+    $('mqtt-note').textContent = link.status === 'online' ? t(`發布 ${link.tx} · 接收 ${link.rx}`, `sent ${link.tx} · received ${link.rx}`) : t('broker 未連線，戰情室以離線模式運作', 'broker offline, running in offline mode');
     const stu = [...link.students].filter(([, v]) => Date.now() - v.t < 120e3);
     $('mqtt').innerHTML = `
-      <div>${link.broker ? `Broker <code>${link.broker.tcp}</code> · ` : ''}主題 <code>${MQTT.base}/#</code></div>
-      <div class="log">${link.log.slice(0, 5).map(m => `<div>${hm(m.t)} <b>${m.topic.replace(/</g, '&lt;')}</b> <span>${m.payload.replace(/</g, '&lt;')}</span></div>`).join('') || '<div>尚未收到訊息</div>'}</div>
-      <div class="stu">學生節點${stu.length ? ` <em>${stu.length} 組上線</em>` : ''}：${stu.length ? stu.sort(([a], [b]) => a.localeCompare(b, 'zh-Hant', { numeric: true })).map(([k, v]) => `<span class="chip"><b>${k.replace(/</g, '&lt;')}</b>${v.payload.replace(/</g, '&lt;').slice(0, 40)}</span>`).join('') : `發布到 <code>${MQTT.base}/student/你的名字</code> 就會出現在這裡`}</div>`;
+      <div>${link.broker ? `Broker <code>${link.broker.tcp}</code> · ` : ''}${t('主題', 'Topic')} <code>${MQTT.base}/#</code></div>
+      <div class="log">${link.log.slice(0, 5).map(m => `<div>${hm(m.t)} <b>${m.topic.replace(/</g, '&lt;')}</b> <span>${m.payload.replace(/</g, '&lt;')}</span></div>`).join('') || `<div>${t('尚未收到訊息', 'No messages yet')}</div>`}</div>
+      <div class="stu">${t('學生節點', 'Student nodes')}${stu.length ? ` <em>${t(`${stu.length} 組上線`, `${stu.length} online`)}</em>` : ''}${t('：', ': ')}${stu.length ? stu.sort(([a], [b]) => a.localeCompare(b, 'zh-Hant', { numeric: true })).map(([k, v]) => `<span class="chip"><b>${k.replace(/</g, '&lt;')}</b>${v.payload.replace(/</g, '&lt;').slice(0, 40)}</span>`).join('') : t(`發布到 <code>${MQTT.base}/student/你的名字</code> 就會出現在這裡`, `publish to <code>${MQTT.base}/student/your-name</code> to appear here`)}</div>`;
   }
 
   // 需量反應演練的大螢幕排行：進行中顯示計時與名次，結束後保留結果 2 分鐘
@@ -412,7 +415,7 @@ export class View {
       <div class="dr-head"><b>⚡ 需量反應演練${en('Demand response drill')}</b><span class="dr-t">${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}</span>
         <span>${live ? '台電通知卸載：LED 在閃的組，<b>按下按鈕！</b>' + en('Shed load now: teams with a blinking LED, <b>press the button!</b>') : '演練結束' + en('Drill over')}</span>
         <em>${dr.acks.length} 組回應 · 卸載 ${fmt(live ? s.drSaved : dr.saved)} kW${en(`${dr.acks.length} teams · ${fmt(live ? s.drSaved : dr.saved)} kW shed`)}</em></div>
-      <ol>${dr.acks.slice(0, 13).map(a => `<li class="${a.rank <= 3 ? 'top' : ''}"><i>${a.rank}</i><b>${esc(a.by)}</b><small>${esc(a.ids.map(id => m.byId[id] ? m.byId[id].name : id).join('、'))} · ${a.sec.toFixed(1)} 秒</small></li>`).join('') || `<li class="none">等待第一組按下按鈕…${en('Waiting for the first team to press the button…')}</li>`}</ol>`;
+      <ol>${dr.acks.slice(0, 13).map(a => `<li class="${a.rank <= 3 ? 'top' : ''}"><i>${a.rank}</i><b>${esc(a.by)}</b><small>${esc(a.ids.map(id => m.byId[id] ? m.byId[id].name : id).join(t('、', ', ')))} · ${a.sec.toFixed(1)} ${t('秒', 's')}</small></li>`).join('') || `<li class="none">等待第一組按下按鈕…${en('Waiting for the first team to press the button…')}</li>`}</ol>`;
     if (el.innerHTML !== html) el.innerHTML = html;
     el.classList.toggle('live', !!live);
   }
@@ -428,7 +431,7 @@ export class View {
     const dr = $('dr');
     el.style.top = dr.hidden ? '' : `calc(${dr.offsetTop + dr.offsetHeight}px + .5rem)`;
     const esc = t => String(t).replace(/</g, '&lt;'), mmss = s => `${pad2(Math.floor(s / 60))}:${pad2(s % 60)}`;
-    const html = (items.some(a => a.end) ? '<button class="alm-x" data-close title="關閉已結束的結果">✕</button>' : '') + items.map(a => {
+    const html = (items.some(a => a.end) ? `<button class="alm-x" data-close title="${t('關閉已結束的結果', 'Close finished results')}">✕</button>` : '') + items.map(a => {
       const live = !a.end, sec = Math.floor(((a.end || Date.now()) - a.start) / 1000);
       const left = a.end ? Math.max(0, 60 - Math.floor((Date.now() - a.end) / 1000)) : 0;
       const gs = [...a.groups.values()].sort((x, y) => (x.done ?? 1e9) - (y.done ?? 1e9) || (x.accept ?? 1e9) - (y.accept ?? 1e9) || (x.seen ?? 1e9) - (y.seen ?? 1e9));
@@ -453,9 +456,9 @@ export class View {
   }
 
   renderAlerts({ alerts }) {
-    const name = { crit: '緊急', warn: '警告', info: '通知' };
+    const name = { crit: t('緊急', 'Critical'), warn: t('警告', 'Warning'), info: t('通知', 'Info') };
     $('alerts').innerHTML = alerts.length
       ? alerts.slice(0, 5).map(a => `<li class="${a.level}"><time>${clockText(a.t).slice(-8)}</time><span class="lv">${name[a.level]}</span><span>${a.text}</span></li>`).join('')
-      : '<li class="none">目前沒有告警。按右側的情境按鈕，可以觀察系統在各種狀況下的反應。</li>';
+      : `<li class="none">${t('目前沒有告警。按右側的情境按鈕，可以觀察系統在各種狀況下的反應。', 'No alerts. Press a scenario button on the right to see how the system responds.')}</li>`;
   }
 }
